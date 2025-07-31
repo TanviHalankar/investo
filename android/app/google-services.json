@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "672483643663",
+    "project_id": "investo-flutter",
+    "storage_bucket": "investo-flutter.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:672483643663:android:cf1695f43959c7d52bee7a",
+        "android_client_info": {
+          "package_name": "com.tanvihalankar.investo"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDPFc8A-Hsn3WpNfOczIJoZIT7Xh_lPK7o"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
