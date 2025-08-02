@@ -1,1 +1,30 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"investo-flutter","appId":"1:672483643663:android:cf1695f43959c7d52bee7a","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"investo-flutter","configurations":{"android":"1:672483643663:android:cf1695f43959c7d52bee7a","web":"1:672483643663:web:0b7ee838b8fb56842bee7a"}}}}}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "investo-flutter",
+          "appId": "1:672483643663:android:cf1695f43959c7d52bee7a",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "investo-flutter",
+          "configurations": {
+            "android": "1:672483643663:android:cf1695f43959c7d52bee7a",
+            "web": "1:672483643663:web:0b7ee838b8fb56842bee7a"
+          }
+        }
+      }
+    }
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ]
+  }
+}
