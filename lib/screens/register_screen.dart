@@ -1,22 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'home_screen.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
-import 'register_screen.dart';
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+class RegisterScreen extends StatefulWidget {
+  const RegisterScreen({super.key});
 
   @override
-  State<LoginScreen> createState() => _LoginScreenState();
+  _RegisterScreenState createState() => _RegisterScreenState();
 }
 
-class _LoginScreenState extends State<LoginScreen>
+class _RegisterScreenState extends State<RegisterScreen>
     with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
 
   AnimationController? _controller;
   Animation<double>? _fadeAnimation;
@@ -59,13 +60,18 @@ class _LoginScreenState extends State<LoginScreen>
     super.dispose();
   }
 
-  void _login() async {
+  void _register() async {
     try {
-      final userCredential = await _auth.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+      final userCredential = await _auth.createUserWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
       );
       if (userCredential.user != null) {
+        await _firestore.collection('users').doc(userCredential.user!.uid).set({
+          'email': userCredential.user!.email,
+          'createdAt': FieldValue.serverTimestamp(),
+        });
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
@@ -78,7 +84,7 @@ class _LoginScreenState extends State<LoginScreen>
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Login failed: $e'),
+          content: Text('Registration failed: $e'),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -87,11 +93,11 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  void _signInWithGoogle() async {
-    // TODO: Implement Google Sign In
+  void _signUpWithGoogle() async {
+    // TODO: Implement Google Sign Up
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Google Sign In - Coming Soon!'),
+        content: const Text('Google Sign Up - Coming Soon!'),
         backgroundColor: Colors.blue.shade400,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -99,11 +105,11 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  void _signInWithApple() async {
-    // TODO: Implement Apple Sign In
+  void _signUpWithApple() async {
+    // TODO: Implement Apple Sign Up
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Apple Sign In - Coming Soon!'),
+        content: const Text('Apple Sign Up - Coming Soon!'),
         backgroundColor: Colors.grey.shade800,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -116,7 +122,6 @@ class _LoginScreenState extends State<LoginScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      resizeToAvoidBottomInset: true,
       body: Container(
         width: size.width,
         height: size.height,
@@ -138,7 +143,7 @@ class _LoginScreenState extends State<LoginScreen>
             // Animated floating elements
             ...List.generate(6, (index) => _buildFloatingElement(index)),
 
-            // Main content with proper keyboard handling
+            // Main content
             SafeArea(
               child: SingleChildScrollView(
                 // physics: const BouncingScrollPhysics(),
@@ -149,26 +154,22 @@ class _LoginScreenState extends State<LoginScreen>
                         MediaQuery.of(context).padding.top -
                         MediaQuery.of(context).padding.bottom,
                   ),
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
-                      child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
-                          ? FadeTransition(
-                        opacity: _fadeAnimation!,
-                        child: SlideTransition(
-                          position: _slideAnimation!,
-                          child: ScaleTransition(
-                            scale: _scaleAnimation!,
-                            child: _buildLoginCard(context),
-                          ),
-                        ),
-                      )
-                          : _buildLoginCard(context),
+                child: Center(
+                  child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
+                      ? FadeTransition(
+                    opacity: _fadeAnimation!,
+                    child: SlideTransition(
+                      position: _slideAnimation!,
+                      child: ScaleTransition(
+                        scale: _scaleAnimation!,
+                        child: _buildRegisterCard(context),
+                      ),
                     ),
-                  ),
+                  )
+                      : _buildRegisterCard(context),
                 ),
               ),
-            ),
+            ),)
           ],
         ),
       ),
@@ -221,7 +222,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
-  Widget _buildLoginCard(BuildContext context) {
+  Widget _buildRegisterCard(BuildContext context) {
     return Container(
       width: MediaQuery.of(context).size.width * 0.9,
       constraints: const BoxConstraints(maxWidth: 400),
@@ -258,7 +259,7 @@ class _LoginScreenState extends State<LoginScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Logo with pulsing animation - made smaller
+          // Logo with pulsing animation
           TweenAnimationBuilder(
             duration: const Duration(milliseconds: 2000),
             tween: Tween<double>(begin: 0.8, end: 1.0),
@@ -270,22 +271,22 @@ class _LoginScreenState extends State<LoginScreen>
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFF00F5FF),
-                        Color(0xFF00D4AA),
-                        Color(0xFF00F5FF),
+                        Color(0xFFFF6B6B),
+                        Color(0xFF4ECDC4),
+                        Color(0xFFFF6B6B),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00F5FF).withOpacity(0.5),
+                        color: const Color(0xFFFF6B6B).withOpacity(0.5),
                         blurRadius: 15,
                         spreadRadius: 1,
                       ),
                     ],
                   ),
                   child: const Icon(
-                    Icons.trending_up_rounded,
+                    Icons.person_add_rounded,
                     size: 40,
                     color: Colors.white,
                   ),
@@ -299,13 +300,13 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 20),
 
-          // Welcome text with gradient - smaller font
+          // Welcome text with gradient
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.white, Color(0xFF00F5FF)],
+              colors: [Colors.white, Color(0xFFFF6B6B)],
             ).createShader(bounds),
             child: const Text(
-              'Welcome Back!',
+              'Join StockMaster!',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -316,7 +317,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'Login to StockMaster',
+            'Create your account',
             style: TextStyle(
               fontSize: 16,
               color: Colors.white.withOpacity(0.8),
@@ -325,7 +326,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 24),
 
-          // Email field with glassmorphism - reduced padding
+          // Email field with glassmorphism
           _buildGlassTextField(
             controller: _emailController,
             label: 'Email Address',
@@ -343,20 +344,20 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 24),
 
-          // Login button with gradient - reduced height
+          // Register button with gradient
           Container(
             width: double.infinity,
             height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00F5FF).withOpacity(0.4),
+                  color: const Color(0xFFFF6B6B).withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -365,11 +366,11 @@ class _LoginScreenState extends State<LoginScreen>
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _login,
+                onTap: _register,
                 borderRadius: BorderRadius.circular(16),
                 child: const Center(
                   child: Text(
-                    'Sign In',
+                    'Create Account',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -383,7 +384,7 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 20),
 
-          // Divider with text - more compact
+          // Divider with text
           Row(
             children: [
               Expanded(
@@ -395,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  'or continue with',
+                  'or sign up with',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 12,
@@ -412,18 +413,18 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 16),
 
-          // Social login buttons - made smaller
+          // Social signup buttons
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildSocialButton(
-                onTap: _signInWithGoogle,
+                onTap: _signUpWithGoogle,
                 icon: Icons.g_mobiledata,
                 color: const Color(0xFFDB4437),
                 label: 'Google',
               ),
               _buildSocialButton(
-                onTap: _signInWithApple,
+                onTap: _signUpWithApple,
                 icon: Icons.apple,
                 color: const Color(0xFF000000),
                 label: 'Apple',
@@ -432,31 +433,26 @@ class _LoginScreenState extends State<LoginScreen>
           ),
           const SizedBox(height: 20),
 
-          // Sign up link - more compact
+          // Login link
           TextButton(
             onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const RegisterScreen(),
-                ),
-              );
+              Navigator.pop(context);
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             child: RichText(
               text: TextSpan(
-                text: "Don't have an account? ",
+                text: "Already have an account? ",
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
                 ),
                 children: const [
                   TextSpan(
-                    text: "Sign up",
+                    text: "Sign in",
                     style: TextStyle(
-                      color: Color(0xFF00F5FF),
+                      color: Color(0xFFFF6B6B),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -512,7 +508,7 @@ class _LoginScreenState extends State<LoginScreen>
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
               ),
               borderRadius: BorderRadius.circular(6),
             ),
