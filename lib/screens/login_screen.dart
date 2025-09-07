@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:investo/screens/trade_prediction_screen.dart';
 import 'home_screen.dart';
 import '../widgets/custom_button.dart';
 import '../widgets/custom_text_field.dart';
@@ -72,6 +73,8 @@ class _LoginScreenState extends State<LoginScreen>
             builder: (context) => HomeScreen(
               username: userCredential.user!.email!.split('@')[0],
             ),
+
+            // builder: (context) => TradePredictionScreen(tradeId: 'demo123'),
           ),
         );
       }

@@ -1,6 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:investo/screens/learning_screen.dart';
+import 'package:investo/screens/portfolio_screen.dart';
+import 'package:investo/screens/practice%20_trading.dart';
+import 'package:investo/screens/prediction_screen.dart';
+
+import '../api_service.dart';
+import 'leader_board_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String username;
@@ -320,6 +327,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const Color(0xFF00d4aa),
               () {
             // Navigate to learning modules
+                Navigator.push(context, MaterialPageRoute(builder: (context) => LearningScreen(username: widget.username,)));
+
           },
         ),
         const SizedBox(height: 16),
@@ -337,12 +346,41 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           const Color(0xFFfdcb6e),
               () {
             // Navigate to leaderboard
+                Navigator.push(context, MaterialPageRoute(builder: (context) => LeaderBoardScreen()));
           },
           fullWidth: true,
         ),
+        _buildSecondaryButton(
+          'Portfolio',
+          Icons.leaderboard,
+          const Color(0xFFfdcb6e),
+              () {
+            // Navigate to leaderboard
+                Navigator.push(context, MaterialPageRoute(builder: (context) => PortfolioScreen()));
+          },
+          fullWidth: true,
+        ),
+
+        _buildSecondaryButton(
+          'Get ML Prediction',
+          Icons.analytics,
+          const Color(0xFF00d4aa),
+              () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => PredictionScreen(username: widget.username),
+              ),
+            );
+          },
+        ),
+
+
+
       ],
     );
   }
+
 
   Widget _buildWebButtonLayout() {
     return Row(
@@ -354,6 +392,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             const Color(0xFF6c5ce7),
                 () {
               // Navigate to practice trading
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => PracticeScreen(username: widget.username)));
             },
           ),
         ),
@@ -372,16 +411,18 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     );
   }
 
+
   Widget _buildMobileButtonLayout() {
     return Row(
       children: [
         Expanded(
           child: _buildSecondaryButton(
-            'Practice',
+            'Practice Trading',
             Icons.psychology,
             const Color(0xFF6c5ce7),
                 () {
               // Navigate to practice trading
+                  Navigator.push(context, MaterialPageRoute(builder: (context) => PracticeScreen(username: widget.username,)));
             },
           ),
         ),
