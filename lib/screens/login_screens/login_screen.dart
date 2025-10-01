@@ -1,23 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'home_screen.dart';
-import '../widgets/custom_button.dart';
-import '../widgets/custom_text_field.dart';
+import 'package:investo/screens/trade_prediction_screen.dart';
+import '../home_page/home_screen.dart';
+import '../../widgets/custom_button.dart';
+import '../../widgets/custom_text_field.dart';
+import 'register_screen.dart';
 
-class RegisterScreen extends StatefulWidget {
-  const RegisterScreen({super.key});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
 
   @override
-  _RegisterScreenState createState() => _RegisterScreenState();
+  State<LoginScreen> createState() => _LoginScreenState();
 }
 
-class _RegisterScreenState extends State<RegisterScreen>
+class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
 
   AnimationController? _controller;
   Animation<double>? _fadeAnimation;
@@ -60,31 +60,28 @@ class _RegisterScreenState extends State<RegisterScreen>
     super.dispose();
   }
 
-  void _register() async {
+  void _login() async {
     try {
-      final userCredential = await _auth.createUserWithEmailAndPassword(
-        email: _emailController.text,
-        password: _passwordController.text,
+      final userCredential = await _auth.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
       );
       if (userCredential.user != null) {
-        await _firestore.collection('users').doc(userCredential.user!.uid).set({
-          'email': userCredential.user!.email,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
             builder: (context) => HomeScreen(
               username: userCredential.user!.email!.split('@')[0],
             ),
+
+            // builder: (context) => TradePredictionScreen(tradeId: 'demo123'),
           ),
         );
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Registration failed: $e'),
+          content: Text('Login failed: $e'),
           backgroundColor: Colors.red.shade400,
           behavior: SnackBarBehavior.floating,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -93,11 +90,11 @@ class _RegisterScreenState extends State<RegisterScreen>
     }
   }
 
-  void _signUpWithGoogle() async {
-    // TODO: Implement Google Sign Up
+  void _signInWithGoogle() async {
+    // TODO: Implement Google Sign In
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Google Sign Up - Coming Soon!'),
+        content: const Text('Google Sign In - Coming Soon!'),
         backgroundColor: Colors.blue.shade400,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -105,11 +102,11 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  void _signUpWithApple() async {
-    // TODO: Implement Apple Sign Up
+  void _signInWithApple() async {
+    // TODO: Implement Apple Sign In
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Apple Sign Up - Coming Soon!'),
+        content: const Text('Apple Sign In - Coming Soon!'),
         backgroundColor: Colors.grey.shade800,
         behavior: SnackBarBehavior.floating,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -122,6 +119,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      resizeToAvoidBottomInset: true,
       body: Container(
         width: size.width,
         height: size.height,
@@ -143,7 +141,7 @@ class _RegisterScreenState extends State<RegisterScreen>
             // Animated floating elements
             ...List.generate(6, (index) => _buildFloatingElement(index)),
 
-            // Main content
+            // Main content with proper keyboard handling
             SafeArea(
               child: SingleChildScrollView(
                 // physics: const BouncingScrollPhysics(),
@@ -154,22 +152,26 @@ class _RegisterScreenState extends State<RegisterScreen>
                         MediaQuery.of(context).padding.top -
                         MediaQuery.of(context).padding.bottom,
                   ),
-                child: Center(
-                  child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
-                      ? FadeTransition(
-                    opacity: _fadeAnimation!,
-                    child: SlideTransition(
-                      position: _slideAnimation!,
-                      child: ScaleTransition(
-                        scale: _scaleAnimation!,
-                        child: _buildRegisterCard(context),
-                      ),
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 20.0),
+                      child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
+                          ? FadeTransition(
+                        opacity: _fadeAnimation!,
+                        child: SlideTransition(
+                          position: _slideAnimation!,
+                          child: ScaleTransition(
+                            scale: _scaleAnimation!,
+                            child: _buildLoginCard(context),
+                          ),
+                        ),
+                      )
+                          : _buildLoginCard(context),
                     ),
-                  )
-                      : _buildRegisterCard(context),
+                  ),
                 ),
               ),
-            ),)
+            ),
           ],
         ),
       ),
@@ -222,7 +224,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-  Widget _buildRegisterCard(BuildContext context) {
+  Widget _buildLoginCard(BuildContext context) {
     return Container(
       width: MediaQuery.of(context).size.width * 0.9,
       constraints: const BoxConstraints(maxWidth: 400),
@@ -259,7 +261,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Logo with pulsing animation
+          // Logo with pulsing animation - made smaller
           TweenAnimationBuilder(
             duration: const Duration(milliseconds: 2000),
             tween: Tween<double>(begin: 0.8, end: 1.0),
@@ -271,22 +273,22 @@ class _RegisterScreenState extends State<RegisterScreen>
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
                       colors: [
-                        Color(0xFFFF6B6B),
-                        Color(0xFF4ECDC4),
-                        Color(0xFFFF6B6B),
+                        Color(0xFF00F5FF),
+                        Color(0xFF00D4AA),
+                        Color(0xFF00F5FF),
                       ],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF6B6B).withOpacity(0.5),
+                        color: const Color(0xFF00F5FF).withOpacity(0.5),
                         blurRadius: 15,
                         spreadRadius: 1,
                       ),
                     ],
                   ),
                   child: const Icon(
-                    Icons.person_add_rounded,
+                    Icons.trending_up_rounded,
                     size: 40,
                     color: Colors.white,
                   ),
@@ -300,13 +302,13 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 20),
 
-          // Welcome text with gradient
+          // Welcome text with gradient - smaller font
           ShaderMask(
             shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.white, Color(0xFFFF6B6B)],
+              colors: [Colors.white, Color(0xFF00F5FF)],
             ).createShader(bounds),
             child: const Text(
-              'Join StockMaster!',
+              'Welcome Back!',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
@@ -317,7 +319,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 4),
           Text(
-            'Create your account',
+            'Login to StockMaster',
             style: TextStyle(
               fontSize: 16,
               color: Colors.white.withOpacity(0.8),
@@ -326,7 +328,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 24),
 
-          // Email field with glassmorphism
+          // Email field with glassmorphism - reduced padding
           _buildGlassTextField(
             controller: _emailController,
             label: 'Email Address',
@@ -344,20 +346,20 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 24),
 
-          // Register button with gradient
+          // Login button with gradient - reduced height
           Container(
             width: double.infinity,
             height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
+                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF6B6B).withOpacity(0.4),
+                  color: const Color(0xFF00F5FF).withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -366,11 +368,11 @@ class _RegisterScreenState extends State<RegisterScreen>
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _register,
+                onTap: _login,
                 borderRadius: BorderRadius.circular(16),
                 child: const Center(
                   child: Text(
-                    'Create Account',
+                    'Sign In',
                     style: TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -384,7 +386,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 20),
 
-          // Divider with text
+          // Divider with text - more compact
           Row(
             children: [
               Expanded(
@@ -396,7 +398,7 @@ class _RegisterScreenState extends State<RegisterScreen>
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 child: Text(
-                  'or sign up with',
+                  'or continue with',
                   style: TextStyle(
                     color: Colors.white.withOpacity(0.7),
                     fontSize: 12,
@@ -413,18 +415,18 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 16),
 
-          // Social signup buttons
+          // Social login buttons - made smaller
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               _buildSocialButton(
-                onTap: _signUpWithGoogle,
+                onTap: _signInWithGoogle,
                 icon: Icons.g_mobiledata,
                 color: const Color(0xFFDB4437),
                 label: 'Google',
               ),
               _buildSocialButton(
-                onTap: _signUpWithApple,
+                onTap: _signInWithApple,
                 icon: Icons.apple,
                 color: const Color(0xFF000000),
                 label: 'Apple',
@@ -433,26 +435,31 @@ class _RegisterScreenState extends State<RegisterScreen>
           ),
           const SizedBox(height: 20),
 
-          // Login link
+          // Sign up link - more compact
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const RegisterScreen(),
+                ),
+              );
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
             ),
             child: RichText(
               text: TextSpan(
-                text: "Already have an account? ",
+                text: "Don't have an account? ",
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.7),
                   fontSize: 14,
                 ),
                 children: const [
                   TextSpan(
-                    text: "Sign in",
+                    text: "Sign up",
                     style: TextStyle(
-                      color: Color(0xFFFF6B6B),
+                      color: Color(0xFF00F5FF),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -508,7 +515,7 @@ class _RegisterScreenState extends State<RegisterScreen>
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
+                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
               ),
               borderRadius: BorderRadius.circular(6),
             ),

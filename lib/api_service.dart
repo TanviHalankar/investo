@@ -3,7 +3,7 @@ import 'package:http/http.dart' as http;
 
 class ApiService {
   // Replace with your backend URL (use your LAN IP instead of 127.0.0.1 if testing on Chrome)
-  static const String baseUrl = "http://127.0.0.1:5000";
+  static const String baseUrl = "http://127.0.0.1:5000";//192.168.29.12
 
 
   static Future<String> getPrediction(

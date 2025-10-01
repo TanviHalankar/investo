@@ -40,6 +40,7 @@ dependencies:
   concentric_transition: ^1.0.3
   shared_preferences: ^2.5.3
   http: ^1.5.0
+  fl_chart: ^0.70.0
 
 dev_dependencies:
   flutter_test:
