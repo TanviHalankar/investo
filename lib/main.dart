@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:investo/services/real_time_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'screens/login_screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -13,6 +15,10 @@ void main() async {
 
   final prefs = await SharedPreferences.getInstance();
   final showOnboarding = prefs.getBool('onboarding_shown') ?? false;
+  
+  // Initialize real-time service
+  final realTimeService = RealTimeService();
+  realTimeService.connect();
 
   runApp(MyApp(showOnboarding: showOnboarding));
 }

@@ -189,10 +189,10 @@ class _RegisterScreenState extends State<RegisterScreen>
     final pos = positions[index];
 
     return Positioned(
-      top: pos['top'] as double?,
-      bottom: pos['bottom'] as double?,
-      left: pos['left'] as double?,
-      right: pos['right'] as double?,
+      top: pos['top'],
+      bottom: pos['bottom'],
+      left: pos['left'],
+      right: pos['right'],
       child: TweenAnimationBuilder(
         duration: Duration(milliseconds: 2000 + (index * 500)),
         tween: Tween<double>(begin: 0, end: 1),

@@ -4,6 +4,8 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
+import '../../services/real_time_service.dart';
+
 
 class EnhancedStockDetailsSheet extends StatefulWidget {
   final Map<String, dynamic> stock;
@@ -44,19 +46,84 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
   TextEditingController quantityController = TextEditingController(text: '1');
   String orderType = 'Market'; // Market or Limit
   TextEditingController limitPriceController = TextEditingController();
+  
+  // Real-time data
+  final RealTimeService _realTimeService = RealTimeService();
+  List<FlSpot> _chartData = [];
+  Map<String, dynamic> _currentStock = {};
+  bool _isLoading = true;
+  
+  @override
+  void initState() {
+    super.initState();
+    _currentStock = widget.stock;
+    
+    // Initialize chart data
+    _chartData = _generateChartData();
+    
+    // Subscribe to real-time updates for this stock
+    _realTimeService.subscribeToStock(widget.stock['symbol']);
+    
+    // Listen for stock updates
+    _realTimeService.stockUpdates.listen((stockUpdate) {
+      if (mounted && stockUpdate['symbol'] == widget.stock['symbol']) {
+        setState(() {
+          _currentStock = stockUpdate;
+        });
+      }
+    });
+    
+    // Listen for chart data updates
+    _realTimeService.chartDataUpdates.listen((chartData) {
+      if (mounted && chartData['symbol'] == widget.stock['symbol'] && 
+          chartData['period'] == selectedPeriod) {
+        setState(() {
+          if (chartData['data'] != null) {
+            final List<dynamic> points = chartData['data'];
+            _chartData = points.asMap().entries.map((entry) {
+              return FlSpot(entry.key.toDouble(), (entry.value as num).toDouble());
+            }).toList();
+          }
+        });
+      }
+    });
+    
+    setState(() {
+      _isLoading = false;
+    });
+  }
 
   @override
   void dispose() {
+    // Unsubscribe from real-time updates when leaving the page
+    _realTimeService.unsubscribeFromStock(widget.stock['symbol']);
     quantityController.dispose();
     limitPriceController.dispose();
     super.dispose();
+  }
+  
+  void _changePeriod(String period) {
+    setState(() {
+      selectedPeriod = period;
+      _isLoading = true;
+    });
+    
+    // Request new chart data for the selected period
+    _realTimeService.connect();
+    _realTimeService.subscribeToStock(widget.stock['symbol']);
+    
+    // Generate temporary chart data while waiting for real data
+    setState(() {
+      _chartData = _generateChartData();
+      _isLoading = false;
+    });
   }
 
   // Generate sample chart data based on period
   List<FlSpot> _generateChartData() {
     final random = DateTime.now().millisecondsSinceEpoch;
-    final basePrice = double.parse(widget.stock['price'].replaceAll(',', ''));
-    final isPositive = widget.stock['isPositive'] as bool;
+    final basePrice = double.parse(_currentStock['price']?.replaceAll(',', '') ?? widget.stock['price'].replaceAll(',', ''));
+    final isPositive = _currentStock['isPositive'] ?? widget.stock['isPositive'] as bool;
 
     int dataPoints;
     switch (selectedPeriod) {
@@ -560,7 +627,7 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                         const SizedBox(height: 24),
 
                         // Time Period Selector
-                        Container(
+                        SizedBox(
                           height: 44,
                           child: ListView.builder(
                             scrollDirection: Axis.horizontal,

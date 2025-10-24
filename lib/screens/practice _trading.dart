@@ -410,7 +410,7 @@ class _PracticeScreenState extends State<PracticeScreen>
               const SizedBox(height: 12),
 
               // Holdings list
-              ...portfolioPositions.map((position) => _buildPositionCard(position)).toList(),
+              ...portfolioPositions.map((position) => _buildPositionCard(position)),
 
               const SizedBox(height: 20),
             ],
@@ -859,7 +859,7 @@ class _PracticeScreenState extends State<PracticeScreen>
         ),
         const SizedBox(height: 12),
 
-        ...watchlistStocks.take(3).map((stock) => _buildPopularStockCard(stock)).toList(),
+        ...watchlistStocks.take(3).map((stock) => _buildPopularStockCard(stock)),
       ],
     );
   }
@@ -1023,7 +1023,7 @@ class _PracticeScreenState extends State<PracticeScreen>
               const SizedBox(height: 20),
 
               // Watchlist stocks
-              ...watchlistStocks.map((stock) => _buildWatchlistStockCard(stock)).toList(),
+              ...watchlistStocks.map((stock) => _buildWatchlistStockCard(stock)),
 
               const SizedBox(height: 20),
             ],
@@ -1193,7 +1193,7 @@ class _PracticeScreenState extends State<PracticeScreen>
               const SizedBox(height: 16),
 
               // Trade history list
-              ...tradeHistory.map((trade) => _buildTradeHistoryCard(trade)).toList(),
+              ...tradeHistory.map((trade) => _buildTradeHistoryCard(trade)),
 
               const SizedBox(height: 20),
             ],

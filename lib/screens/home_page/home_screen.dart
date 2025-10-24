@@ -1,10 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:investo/chat_bot/chat_screen.dart';
 import 'package:investo/screens/learning_screen.dart';
 import 'package:investo/screens/portfolio_screen.dart';
 import 'package:investo/screens/home_page/prediction_screen.dart';
 import '../../api_service.dart';
+import '../../model/stock_model.dart';
+import '../../services/real_time_service.dart';
 import '../leader_board_screen.dart';
 import '../practice _trading.dart';
 import 'enhanced_chart.dart';
@@ -22,13 +25,17 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
-  TextEditingController _searchController = TextEditingController();
+  final TextEditingController _searchController = TextEditingController();
   int _selectedBottomNavIndex = 0;
   int _selectedCarouselIndex = 0;
 
   List<Map<String, dynamic>> _filteredStocks = [];
-  List<Map<String, dynamic>> _watchlistStocks = [];
+  final List<Map<String, dynamic>> _watchlistStocks = [];
   bool _isSearching = false;
+  
+  // Real-time service
+  final RealTimeService _realTimeService = RealTimeService();
+  bool _isLoading = true;
 
   // Modern dark color scheme with orange accents
   static const Color darkBg = Color(0xFF0D0D0D);
@@ -102,6 +109,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _filteredStocks = [];
 
     _searchController.addListener(_onSearchChanged);
+    
+    // Initialize real-time data
+    _initRealTimeData();
   }
 
   void _onSearchChanged() {
@@ -120,6 +130,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
   }
 
   void _addToWatchlist(Map<String, dynamic> stock) {
+    // Subscribe to real-time updates for this stock
+    _realTimeService.subscribeToStock(stock['symbol']);
     setState(() {
       // Check if already in watchlist
       bool alreadyExists = _watchlistStocks.any((s) => s['symbol'] == stock['symbol']);
@@ -167,11 +179,68 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     return _watchlistStocks.any((s) => s['symbol'] == symbol);
   }
 
+  void _initRealTimeData() async {
+    setState(() {
+      _isLoading = true;
+    });
+    
+    try {
+      // Connect to the real-time service
+      _realTimeService.connect();
+      
+      // Get initial data
+      final mockData = _realTimeService.getMockStockData();
+      setState(() {
+        allAvailableStocks = mockData;
+      });
+      
+      // Listen for market updates
+      _realTimeService.marketUpdates.listen((updatedStocks) {
+        if (mounted) {
+          setState(() {
+            allAvailableStocks = updatedStocks;
+          });
+        }
+      });
+      
+      // Listen for individual stock updates
+      _realTimeService.stockUpdates.listen((stockUpdate) {
+        if (mounted) {
+          setState(() {
+            final index = allAvailableStocks.indexWhere(
+              (stock) => stock['symbol'] == stockUpdate['symbol']
+            );
+            
+            if (index != -1) {
+              allAvailableStocks[index] = stockUpdate;
+            }
+            
+            // Also update watchlist if needed
+            final watchlistIndex = _watchlistStocks.indexWhere(
+              (stock) => stock['symbol'] == stockUpdate['symbol']
+            );
+            
+            if (watchlistIndex != -1) {
+              _watchlistStocks[watchlistIndex] = stockUpdate;
+            }
+          });
+        }
+      });
+    } catch (e) {
+      print('Error initializing real-time data: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
-    _fadeController.dispose();
-    _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
@@ -513,7 +582,19 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           ),
         ),
       ),
+      // 👇 Add this FAB
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: accentOrange,
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const ChatScreen()),
+          );
+        },
+        child: const Icon(Icons.chat, color: Colors.white),
+      ),
       bottomNavigationBar: _buildBottomNavigation(),
+
     );
   }
 
@@ -658,7 +739,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             )
           else
-            ..._filteredStocks.map((stock) => _buildSearchResultCard(stock)).toList(),
+            ..._filteredStocks.map((stock) => _buildSearchResultCard(stock)),
         ],
       ),
     );
@@ -791,7 +872,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       opacity: _fadeAnimation,
       child: Column(
         children: [
-          Container(
+          SizedBox(
             height: 44,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
@@ -837,7 +918,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             ),
           ),
           const SizedBox(height: 20),
-          Container(
+          SizedBox(
             height: 150,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
@@ -970,7 +1051,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               ),
             )
           else
-            ..._watchlistStocks.map((stock) => _buildWatchlistCard(stock)).toList(),
+            ..._watchlistStocks.map((stock) => _buildWatchlistCard(stock)),
         ],
       ),
     );
@@ -1155,4 +1236,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       ),
     );
   }
+
+
+
+
 }

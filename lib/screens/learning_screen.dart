@@ -537,7 +537,7 @@ class _LearningScreenState extends State<LearningScreen>
           Lesson lesson = entry.value;
 
           return _buildLessonCard(lesson, index);
-        }).toList(),
+        }),
       ],
     );
   }
