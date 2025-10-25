@@ -45,6 +45,7 @@ dependencies:
   chat_bubbles: ^1.7.0
   flutter_spinkit: ^5.2.2
   google_fonts: ^6.3.2
+  intl: ^0.20.2
 #  yahoo_finance_data_reader: ^1.0.12
 
 

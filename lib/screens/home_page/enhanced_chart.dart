@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 
 import '../../services/real_time_service.dart';
+import '../../services/portfolio_service.dart';
+import '../../services/guide_service.dart';
 
 
 class EnhancedStockDetailsSheet extends StatefulWidget {
@@ -71,6 +73,16 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
           _currentStock = stockUpdate;
         });
       }
+    });
+
+    // Show trade guidance once when opening details
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      GuideService().show(GuideStep(
+        id: 'trade_actions',
+        title: 'Buy or Sell',
+        message: 'Use BUY to purchase with demo cash or SELL to book profits. You earn points for trades!',
+        bubbleAlignment: Alignment.topRight,
+      ));
     });
     
     // Listen for chart data updates
@@ -379,45 +391,45 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                   ),
                   SizedBox(height: 24),
 
-                  // Place Order Button
-                  Container(
-                    width: double.infinity,
-                    height: 56,
-                    decoration: BoxDecoration(
-                      color: actionColor,
-                      borderRadius: BorderRadius.circular(16),
-                      boxShadow: [
-                        BoxShadow(
-                          color: actionColor.withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: Offset(0, 4),
+                        // Place Order Button
+                        Container(
+                          width: double.infinity,
+                          height: 56,
+                          decoration: BoxDecoration(
+                            color: actionColor,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [
+                              BoxShadow(
+                                color: actionColor.withOpacity(0.3),
+                                blurRadius: 12,
+                                offset: Offset(0, 4),
+                              ),
+                            ],
+                          ),
+                          child: ElevatedButton(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              _showOrderConfirmation(action, quantity, price, totalAmount);
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shadowColor: Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                            ),
+                            child: Text(
+                              'Place $action Order',
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
                         ),
-                      ],
-                    ),
-                    child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _showOrderConfirmation(action, quantity, price, totalAmount);
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.transparent,
-                        foregroundColor: Colors.white,
-                        elevation: 0,
-                        shadowColor: Colors.transparent,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                      ),
-                      child: Text(
-                        'Place $action Order',
-                        style: TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -474,18 +486,38 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
     );
   }
 
-  void _showOrderConfirmation(String action, int quantity, double price, double total) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$action order placed: $quantity x ${widget.stock['symbol']} @ ₹${price.toStringAsFixed(2)}',
-        ),
-        backgroundColor: action == 'BUY' ? positiveGreen : negativeRed,
-        duration: Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
+  Future<void> _showOrderConfirmation(String action, int quantity, double price, double total) async {
+    try {
+      final service = PortfolioService();
+      final symbol = widget.stock['symbol'] as String;
+      final name = (widget.stock['name'] ?? symbol) as String;
+
+      if (action == 'BUY') {
+        await service.buy(symbol: symbol, name: name, quantity: quantity, price: price);
+      } else {
+        await service.sell(symbol: symbol, name: name, quantity: quantity, price: price);
+      }
+
+      // complete guide step and award bonus
+      await GuideService().complete('trade_actions');
+      await GuideService().complete('first_trade', award: 50);
+
+      if (!mounted) return;
+      GuideService().show(GuideStep(
+        id: 'order_placed',
+        title: '$action placed',
+        message: '$quantity x ${widget.stock['symbol']} @ ₹${price.toStringAsFixed(2)}. Check Portfolio for P&L.',
+      ));
+      Future.delayed(const Duration(seconds: 2), () => GuideService().hide());
+    } catch (e) {
+      if (!mounted) return;
+      GuideService().show(GuideStep(
+        id: 'order_failed',
+        title: 'Order failed',
+        message: '$e',
+      ));
+      Future.delayed(const Duration(seconds: 2), () => GuideService().hide());
+    }
   }
 
   @override

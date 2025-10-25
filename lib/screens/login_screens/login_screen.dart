@@ -5,6 +5,8 @@ import '../home_page/home_screen.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import 'register_screen.dart';
+import '../../services/user_data_service.dart';
+import '../../model/user_model.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -66,28 +68,70 @@ class _LoginScreenState extends State<LoginScreen>
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
+      
       if (userCredential.user != null) {
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(
-              username: userCredential.user!.email!.split('@')[0],
-            ),
-
-            // builder: (context) => TradePredictionScreen(tradeId: 'demo123'),
-          ),
+        final user = userCredential.user!;
+        final username = user.email!.split('@')[0];
+        
+        // Create user model with current data
+        final userModel = UserModel(
+          userId: user.uid,
+          email: user.email!,
+          username: username,
+          displayName: user.displayName,
+          photoUrl: user.photoURL,
+          lastLogin: DateTime.now(),
+          preferences: {
+            'theme': 'dark',
+            'notifications': true,
+            'language': 'en',
+          },
+          portfolio: {
+            'virtualMoney': 10000.0,
+            'totalInvested': 0.0,
+            'totalReturns': 0.0,
+            'holdings': <String, dynamic>{},
+            'watchlist': <String, dynamic>{},
+          },
+          settings: {
+            'riskLevel': 'medium',
+            'autoTrade': false,
+            'soundEnabled': true,
+          },
         );
+        
+        // Save user data to SharedPreferences
+        final userDataService = UserDataService.instance;
+        await userDataService.init();
+        final success = await userDataService.saveUserData(userModel);
+        
+        if (success) {
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (context) => HomeScreen(
+                username: username,
+              ),
+            ),
+          );
+        } else {
+          _showErrorSnackBar('Failed to save user data. Please try again.');
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Login failed: $e'),
-          backgroundColor: Colors.red.shade400,
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
+      _showErrorSnackBar('Login failed: $e');
     }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red.shade400,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+    );
   }
 
   void _signInWithGoogle() async {

@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:intl/intl.dart';
+import 'package:investo/services/portfolio_service.dart';
 
 import 'AboutUsPage.dart';
 import 'AccountDetailsPage.dart';
@@ -30,14 +33,54 @@ class _ProfilepageState extends State<Profilepage> {
   final Color positiveGreen = const Color(0xFF00E676);
   final Color negativeRed = const Color(0xFFFF5252);
 
-  // User data
-  final String userName = "Aryanr Srivastava";
-  final String userBalance = "₹10000.00";
-  final String balanceSubtitle = "Stocks, F&O balance";
+  // Firebase
+  final _auth = FirebaseAuth.instance;
+  final _firestore = FirebaseFirestore.instance;
+
+  // User data (loaded per user)
+  String userName = "";
+  String userEmail = "";
+  String userBalance = "₹0.00"; // kept for fallback display only
+  final String balanceSubtitle = "Demo money balance";
+  final _portfolio = PortfolioService();
+  final _fmt = NumberFormat.currency(locale: 'en_IN', symbol: '₹');
   final String versionText = "Version 1.1.1";
 
   // Profile image placeholder
-  final String profileImageUrl = "https://avatars.githubusercontent.com/u/98484953?s=400&u=518671a09f9b75967707be40e9dc4b246f4dc85e&v=4"; // Add your image URL here
+  final String profileImageUrl = "";
+
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      setState(() { _loading = false; });
+      return;
+    }
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final data = doc.data() ?? {};
+      setState(() {
+        userEmail = user.email ?? '';
+        userName = (data['fullName'] as String?) ?? user.email?.split('@').first ?? '';
+        // Optional: balance
+        final bal = data['balance'];
+        if (bal is num) userBalance = '₹${bal.toStringAsFixed(2)}';
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() { _loading = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load profile: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -50,20 +93,22 @@ class _ProfilepageState extends State<Profilepage> {
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              child: Column(
-                children: [
-                  _buildHeader(),
-                  _buildProfileSection(),
-                  const SizedBox(height: 24),
-                  _buildMenuList(),
-                  const SizedBox(height: 32),
-                  _buildFooter(),
-                  const SizedBox(height: 24),
-                ],
-              ),
-            ),
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : SingleChildScrollView(
+                    physics: const BouncingScrollPhysics(),
+                    child: Column(
+                      children: [
+                        _buildHeader(),
+                        _buildProfileSection(),
+                        const SizedBox(height: 24),
+                        _buildMenuList(),
+                        const SizedBox(height: 32),
+                        _buildFooter(),
+                        const SizedBox(height: 24),
+                      ],
+                    ),
+                  ),
           ),
         ),
       ),
@@ -167,103 +212,118 @@ class _ProfilepageState extends State<Profilepage> {
           ),
           textAlign: TextAlign.center,
         ),
+        const SizedBox(height: 6),
+        if (userEmail.isNotEmpty)
+          Text(
+            userEmail,
+            style: TextStyle(
+              fontSize: 14,
+              color: textSecondary,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
         const SizedBox(height: 24),
         // Balance Card
-        Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: cardDark,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: borderColor, width: 1),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: cardLight,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: textPrimary,
-                  size: 22,
-                ),
+        StreamBuilder<PortfolioState>(
+          stream: _portfolio.stream,
+          initialData: _portfolio.state,
+          builder: (context, snapshot) {
+            final s = snapshot.data!;
+            final balanceStr = _fmt.format(s.cashBalance);
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16),
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: cardDark,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderColor, width: 1),
               ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      userBalance,
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w600,
-                        color: textPrimary,
-                      ),
+              child: Row(
+                children: [
+                  Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: cardLight,
+                      borderRadius: BorderRadius.circular(12),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      balanceSubtitle,
-                      style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w400,
-                        color: textSecondary,
-                      ),
+                    child: Icon(
+                      Icons.account_balance_wallet_outlined,
+                      color: textPrimary,
+                      size: 22,
                     ),
-                  ],
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  // Navigate to add money
-                  print("Add money tapped");
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 10,
                   ),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [accentOrange, accentOrangeDim],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: accentOrange.withOpacity(0.3),
-                        blurRadius: 8,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.add_circle_outline,
-                        color: textPrimary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        "Add money",
-                        style: TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: textPrimary,
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          balanceStr,
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
+                            color: textPrimary,
+                          ),
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          balanceSubtitle,
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w400,
+                            color: textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
+                  GestureDetector(
+                    onTap: _showTopUpDialog,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [accentOrange, accentOrangeDim],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                        boxShadow: [
+                          BoxShadow(
+                            color: accentOrange.withOpacity(0.3),
+                            blurRadius: 8,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.add_circle_outline,
+                            color: textPrimary,
+                            size: 18,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            "Add money",
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
+                              color: textPrimary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         ),
       ],
     );
@@ -392,6 +452,36 @@ class _ProfilepageState extends State<Profilepage> {
 
         ],
       ),
+    );
+  }
+  void _showTopUpDialog() {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Add demo money'),
+          content: TextField(
+            controller: controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(hintText: 'Enter amount'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () async {
+                final amt = double.tryParse(controller.text.trim()) ?? 0;
+                if (amt > 0) {
+                  await _portfolio.topUp(amt);
+                }
+                if (!mounted) return;
+                Navigator.pop(context);
+              },
+              child: const Text('Add'),
+            ),
+          ],
+        );
+      },
     );
   }
 }

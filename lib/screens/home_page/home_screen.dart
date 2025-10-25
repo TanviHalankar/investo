@@ -8,34 +8,49 @@ import 'package:investo/screens/home_page/prediction_screen.dart';
 import '../../api_service.dart';
 import '../../model/stock_model.dart';
 import '../../services/real_time_service.dart';
+import '../../services/guide_service.dart';
+import '../../services/user_data_service.dart';
 import '../leader_board_screen.dart';
-import '../practice _trading.dart';
+import '../profile_page/ProfilePage.dart';
+import '../ipo_screen.dart';
 import 'enhanced_chart.dart';
+import '../../widgets/simple_tip_widget.dart';
+import '../../widgets/owl_character.dart';
 
 class HomeScreen extends StatefulWidget {
   final String username;
-
   const HomeScreen({super.key, required this.username});
+
+  static HomeScreen fromRoute(BuildContext context) {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    return HomeScreen(username: args is String ? args : 'User');
+  }
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
+class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateMixin {
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
   final TextEditingController _searchController = TextEditingController();
+  final GlobalKey _searchKey = GlobalKey();
   int _selectedBottomNavIndex = 0;
   int _selectedCarouselIndex = 0;
 
   List<Map<String, dynamic>> _filteredStocks = [];
   final List<Map<String, dynamic>> _watchlistStocks = [];
   bool _isSearching = false;
-  
+
   // Real-time service
   final RealTimeService _realTimeService = RealTimeService();
   bool _isLoading = true;
+
+  // Simple tip state
+  bool _showSimpleTip = false;
+  String _tipTitle = '';
+  String _tipMessage = '';
 
   // Modern dark color scheme with orange accents
   static const Color darkBg = Color(0xFF0D0D0D);
@@ -66,21 +81,21 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   // All available stocks in the market
   List<Map<String, dynamic>> allAvailableStocks = [
-    {'symbol': 'RELIANCE', 'name': 'RELIANCE INDUSTRIES', 'price': '2,847.50', 'change': '+5.22%', 'isPositive': true, 'volume': '3.2M', 'high': '2,890.00', 'low': '2,820.00', 'open': '2,835.00', 'marketCap': '₹19.2L Cr', 'pe': '25.3'},
-    {'symbol': 'TCS', 'name': 'TATA CONSULTANCY SERVICES', 'price': '3,456.80', 'change': '+3.15%', 'isPositive': true, 'volume': '2.8M', 'high': '3,480.00', 'low': '3,420.00', 'open': '3,430.00', 'marketCap': '₹12.6L Cr', 'pe': '28.5'},
-    {'symbol': 'INFY', 'name': 'INFOSYS LIMITED', 'price': '1,567.30', 'change': '+2.89%', 'isPositive': true, 'volume': '4.1M', 'high': '1,580.00', 'low': '1,550.00', 'open': '1,555.00', 'marketCap': '₹6.5L Cr', 'pe': '26.8'},
-    {'symbol': 'WIPRO', 'name': 'WIPRO LIMITED', 'price': '445.20', 'change': '-2.34%', 'isPositive': false, 'volume': '5.2M', 'high': '455.00', 'low': '442.00', 'open': '453.00', 'marketCap': '₹2.4L Cr', 'pe': '22.1'},
-    {'symbol': 'TECHM', 'name': 'TECH MAHINDRA', 'price': '1,023.45', 'change': '-1.78%', 'isPositive': false, 'volume': '2.9M', 'high': '1,042.00', 'low': '1,018.00', 'open': '1,038.00', 'marketCap': '₹1.0L Cr', 'pe': '18.4'},
-    {'symbol': 'HDFC', 'name': 'HDFC BANK LIMITED', 'price': '1,634.70', 'change': '+1.45%', 'isPositive': true, 'volume': '6.3M', 'high': '1,650.00', 'low': '1,620.00', 'open': '1,625.00', 'marketCap': '₹12.3L Cr', 'pe': '19.7'},
-    {'symbol': 'ICICI', 'name': 'ICICI BANK LIMITED', 'price': '987.60', 'change': '-0.67%', 'isPositive': false, 'volume': '7.1M', 'high': '995.00', 'low': '982.00', 'open': '993.00', 'marketCap': '₹6.9L Cr', 'pe': '17.2'},
-    {'symbol': 'ADANI', 'name': 'ADANI ENTERPRISES', 'price': '2,156.40', 'change': '+4.23%', 'isPositive': true, 'volume': '4.8M', 'high': '2,180.00', 'low': '2,130.00', 'open': '2,140.00', 'marketCap': '₹2.5L Cr', 'pe': '35.6'},
-    {'symbol': 'BAJAJ', 'name': 'BAJAJ FINANCE', 'price': '7,834.20', 'change': '+2.11%', 'isPositive': true, 'volume': '1.4M', 'high': '7,890.00', 'low': '7,780.00', 'open': '7,800.00', 'marketCap': '₹4.8L Cr', 'pe': '32.4'},
-    {'symbol': 'ITC', 'name': 'ITC LIMITED', 'price': '445.60', 'change': '+0.89%', 'isPositive': true, 'volume': '8.9M', 'high': '448.00', 'low': '442.00', 'open': '443.00', 'marketCap': '₹5.5L Cr', 'pe': '24.3'},
-    {'symbol': 'HCLTECH', 'name': 'HCL TECHNOLOGIES', 'price': '1,234.80', 'change': '-0.45%', 'isPositive': false, 'volume': '3.2M', 'high': '1,245.00', 'low': '1,228.00', 'open': '1,240.00', 'marketCap': '₹3.3L Cr', 'pe': '21.7'},
-    {'symbol': 'BHARTI', 'name': 'BHARTI AIRTEL', 'price': '1,567.90', 'change': '+2.34%', 'isPositive': true, 'volume': '4.5M', 'high': '1,580.00', 'low': '1,545.00', 'open': '1,552.00', 'marketCap': '₹9.2L Cr', 'pe': '42.8'},
-    {'symbol': 'ASIAN', 'name': 'ASIAN PAINTS', 'price': '2,945.30', 'change': '-1.23%', 'isPositive': false, 'volume': '1.8M', 'high': '2,982.00', 'low': '2,935.00', 'open': '2,975.00', 'marketCap': '₹2.8L Cr', 'pe': '56.2'},
-    {'symbol': 'MARUTI', 'name': 'MARUTI SUZUKI INDIA', 'price': '11,234.50', 'change': '+1.78%', 'isPositive': true, 'volume': '1.2M', 'high': '11,290.00', 'low': '11,180.00', 'open': '11,195.00', 'marketCap': '₹3.4L Cr', 'pe': '28.9'},
-    {'symbol': 'TITAN', 'name': 'TITAN COMPANY', 'price': '3,456.70', 'change': '+0.56%', 'isPositive': true, 'volume': '2.1M', 'high': '3,475.00', 'low': '3,438.00', 'open': '3,445.00', 'marketCap': '₹3.1L Cr', 'pe': '67.3'},
+    {'symbol': 'RELIANCE', 'name': 'RELIANCE INDUSTRIES', 'price': 2847.50, 'change': '+5.22%', 'isPositive': true, 'volume': '3.2M', 'high': '2,890.00', 'low': '2,820.00', 'open': '2,835.00', 'marketCap': '₹19.2L Cr', 'pe': '25.3'},
+    {'symbol': 'TCS', 'name': 'TATA CONSULTANCY SERVICES', 'price': 3456.80, 'change': '+3.15%', 'isPositive': true, 'volume': '2.8M', 'high': '3,480.00', 'low': '3,420.00', 'open': '3,430.00', 'marketCap': '₹12.6L Cr', 'pe': '28.5'},
+    {'symbol': 'INFY', 'name': 'INFOSYS LIMITED', 'price': 1567.30, 'change': '+2.89%', 'isPositive': true, 'volume': '4.1M', 'high': '1,580.00', 'low': '1,550.00', 'open': '1,555.00', 'marketCap': '₹6.5L Cr', 'pe': '26.8'},
+    {'symbol': 'WIPRO', 'name': 'WIPRO LIMITED', 'price': 445.20, 'change': '-2.34%', 'isPositive': false, 'volume': '5.2M', 'high': '455.00', 'low': '442.00', 'open': '453.00', 'marketCap': '₹2.4L Cr', 'pe': '22.1'},
+    {'symbol': 'TECHM', 'name': 'TECH MAHINDRA', 'price': 1023.45, 'change': '-1.78%', 'isPositive': false, 'volume': '2.9M', 'high': '1,042.00', 'low': '1,018.00', 'open': '1,038.00', 'marketCap': '₹1.0L Cr', 'pe': '18.4'},
+    {'symbol': 'HDFC', 'name': 'HDFC BANK LIMITED', 'price': 1634.70, 'change': '+1.45%', 'isPositive': true, 'volume': '6.3M', 'high': '1,650.00', 'low': '1,620.00', 'open': '1,625.00', 'marketCap': '₹12.3L Cr', 'pe': '19.7'},
+    {'symbol': 'ICICI', 'name': 'ICICI BANK LIMITED', 'price': 987.60, 'change': '-0.67%', 'isPositive': false, 'volume': '7.1M', 'high': '995.00', 'low': '982.00', 'open': '993.00', 'marketCap': '₹6.9L Cr', 'pe': '17.2'},
+    {'symbol': 'ADANI', 'name': 'ADANI ENTERPRISES', 'price': 2156.40, 'change': '+4.23%', 'isPositive': true, 'volume': '4.8M', 'high': '2,180.00', 'low': '2,130.00', 'open': '2,140.00', 'marketCap': '₹2.5L Cr', 'pe': '35.6'},
+    {'symbol': 'BAJAJ', 'name': 'BAJAJ FINANCE', 'price': 7834.20, 'change': '+2.11%', 'isPositive': true, 'volume': '1.4M', 'high': '7,890.00', 'low': '7,780.00', 'open': '7,800.00', 'marketCap': '₹4.8L Cr', 'pe': '32.4'},
+    {'symbol': 'ITC', 'name': 'ITC LIMITED', 'price': 445.60, 'change': '+0.89%', 'isPositive': true, 'volume': '8.9M', 'high': '448.00', 'low': '442.00', 'open': '443.00', 'marketCap': '₹5.5L Cr', 'pe': '24.3'},
+    {'symbol': 'HCLTECH', 'name': 'HCL TECHNOLOGIES', 'price': 1234.80, 'change': '-0.45%', 'isPositive': false, 'volume': '3.2M', 'high': '1,245.00', 'low': '1,228.00', 'open': '1,240.00', 'marketCap': '₹3.3L Cr', 'pe': '21.7'},
+    {'symbol': 'BHARTI', 'name': 'BHARTI AIRTEL', 'price': 1567.90, 'change': '+2.34%', 'isPositive': true, 'volume': '4.5M', 'high': '1,580.00', 'low': '1,545.00', 'open': '1,552.00', 'marketCap': '₹9.2L Cr', 'pe': '42.8'},
+    {'symbol': 'ASIAN', 'name': 'ASIAN PAINTS', 'price': 2945.30, 'change': '-1.23%', 'isPositive': false, 'volume': '1.8M', 'high': '2,982.00', 'low': '2,935.00', 'open': '2,975.00', 'marketCap': '₹2.8L Cr', 'pe': '56.2'},
+    {'symbol': 'MARUTI', 'name': 'MARUTI SUZUKI INDIA', 'price': 11234.50, 'change': '+1.78%', 'isPositive': true, 'volume': '1.2M', 'high': '11,290.00', 'low': '11,180.00', 'open': '11,195.00', 'marketCap': '₹3.4L Cr', 'pe': '28.9'},
+    {'symbol': 'TITAN', 'name': 'TITAN COMPANY', 'price': 3456.70, 'change': '+0.56%', 'isPositive': true, 'volume': '2.1M', 'high': '3,475.00', 'low': '3,438.00', 'open': '3,445.00', 'marketCap': '₹3.1L Cr', 'pe': '67.3'},
   ];
 
   Map<String, List<Map<String, dynamic>>> get categoryStocks {
@@ -109,9 +124,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     _filteredStocks = [];
 
     _searchController.addListener(_onSearchChanged);
-    
-    // Initialize real-time data
-    _initRealTimeData();
+
+    // Load user-specific data including persisted watchlist
+    _loadUserData().then((_) {
+      _initRealTimeData();
+    });
   }
 
   void _onSearchChanged() {
@@ -121,79 +138,323 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
       if (query.isEmpty) {
         _filteredStocks = [];
       } else {
+        GuideService().complete('home_welcome', award: 20);
+        // Show next tip
+        Future.delayed(const Duration(seconds: 1), () {
+          GuideService().show(GuideStep(
+            id: 'search_tip',
+            title: 'Great searching! 🔍',
+            message: 'Now tap on any stock to see detailed charts and try demo trading!',
+          ));
+        });
         _filteredStocks = allAvailableStocks.where((stock) {
-          return stock['symbol'].toLowerCase().contains(query) ||
-              stock['name'].toLowerCase().contains(query);
+          return (stock['symbol'] as String).toLowerCase().contains(query) ||
+              (stock['name'] as String).toLowerCase().contains(query);
         }).toList();
       }
     });
   }
 
-  void _addToWatchlist(Map<String, dynamic> stock) {
-    // Subscribe to real-time updates for this stock
-    _realTimeService.subscribeToStock(stock['symbol']);
-    setState(() {
-      // Check if already in watchlist
-      bool alreadyExists = _watchlistStocks.any((s) => s['symbol'] == stock['symbol']);
-      if (!alreadyExists) {
-        _watchlistStocks.add(stock);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${stock['symbol']} added to watchlist'),
-            backgroundColor: positiveGreen,
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        );
+  Future<void> _loadUserData() async {
+    try {
+      print('Loading user data...');
+      final userDataService = UserDataService.instance;
+      final currentUser = userDataService.currentUser;
+
+      if (currentUser != null) {
+        print('Current user found: ${currentUser.username}');
+        // Load user-specific preferences and settings
+        final userPreferences = currentUser.preferences;
+        final userPortfolio = currentUser.portfolio;
+        final userSettings = currentUser.settings;
+
+        // Load watchlist from user data
+        final watchlist = userDataService.getWatchlist();
+
+        print('Loaded user data for: ${currentUser.username}');
+        print('User preferences: $userPreferences');
+        print('User portfolio: $userPortfolio');
+        print('User settings: $userSettings');
+        print('Watchlist: $watchlist');
+
+        // Update UI based on user data
+        setState(() {
+          _watchlistStocks.clear();
+          _watchlistStocks.addAll(watchlist);
+          print('Updated _watchlistStocks: ${_watchlistStocks.length} items');
+        });
+
+        // Show welcome tip if this is the first time
+        if (watchlist.isEmpty) {
+          Future.delayed(const Duration(seconds: 2), () {
+            print('Showing welcome tip...');
+            _showSimpleTipDialog(
+              'Welcome! 🦉',
+              'I\'m your Wise Owl guide! Try searching for stocks like RELIANCE or TCS, then add them to your watchlist!',
+            );
+          });
+        }
       } else {
+        print('No current user found!');
+      }
+    } catch (e) {
+      print('Error loading user data: $e');
+    }
+  }
+
+  void _showSimpleTipDialog(String title, String message) {
+    setState(() {
+      _tipTitle = title;
+      _tipMessage = message;
+      _showSimpleTip = true;
+    });
+  }
+
+  void _hideSimpleTip() {
+    setState(() {
+      _showSimpleTip = false;
+    });
+  }
+
+  Widget _buildPortfolioSummary() {
+    final userDataService = UserDataService.instance;
+    final portfolioSummary = userDataService.getPortfolioSummary();
+
+    return GestureDetector(
+      onTap: () {
+        GuideService().show(GuideStep(
+          id: 'portfolio_tip',
+          title: 'Your Portfolio 💼',
+          message: 'This shows your virtual money and investments. Start with ₹10,000 and try buying some stocks!',
+        ));
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [cardDark, cardLight],
+          ),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderColor, width: 1),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text(
+                  'Portfolio Summary',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w600,
+                    color: textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.info_outline, size: 16, color: textSecondary),
+                  tooltip: 'Show info',
+                  onPressed: () {
+                    GuideService().show(
+                      GuideStep(
+                        id: 'portfolio_summary_tip',
+                        title: 'Portfolio Summary Info',
+                        message: 'This shows virtual money, total invested, holdings, and total value.',
+                      ),
+                    );
+                    Future.delayed(const Duration(seconds: 4), () {
+                      GuideService().showNextTip(context);
+                    });
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Virtual Money',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: textSecondary,
+                      ),
+                    ),
+                    Text(
+                      '₹${portfolioSummary['virtualMoney'].toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    const Text(
+                      'Total Invested',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: textSecondary,
+                      ),
+                    ),
+                    Text(
+                      '₹${portfolioSummary['totalInvested'].toStringAsFixed(2)}',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                        color: accentOrange,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Holdings: ${portfolioSummary['holdingsCount']}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: textSecondary,
+                  ),
+                ),
+                Text(
+                  'Total Value: ₹${portfolioSummary['totalValue'].toStringAsFixed(2)}',
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: positiveGreen,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _buyStock(Map<String, dynamic> stock, int quantity) async {
+    final userDataService = UserDataService.instance;
+    final price = (stock['price'] as num).toDouble();
+    final success = await userDataService.buyStock(
+        stock['symbol'],
+        stock['name'],
+        price,
+        quantity
+    );
+
+    if (success) {
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${stock['symbol']} is already in watchlist'),
-            backgroundColor: accentOrange,
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            content: Text('Successfully bought $quantity shares of ${stock['symbol']}'),
+            backgroundColor: Colors.green,
           ),
         );
       }
-    });
+
+      // Refresh user data
+      _loadUserData();
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Insufficient funds to buy ${stock['symbol']}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
-  void _removeFromWatchlist(Map<String, dynamic> stock) {
-    setState(() {
-      _watchlistStocks.removeWhere((s) => s['symbol'] == stock['symbol']);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${stock['symbol']} removed from watchlist'),
-          backgroundColor: negativeRed,
-          duration: Duration(seconds: 2),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-      );
-    });
+  void _addToWatchlist(Map<String, dynamic> stock) async {
+    print('Adding ${stock['symbol']} to watchlist...');
+    final userDataService = UserDataService.instance;
+    final success = await userDataService.addToWatchlist(stock);
+
+    print('Add to watchlist result: $success');
+    if (success) {
+      // Subscribe to real-time updates for this stock
+      _realTimeService.subscribeToStock(stock['symbol']);
+      setState(() {
+        _watchlistStocks.add(stock);
+        print('Added to local watchlist. Total items: ${_watchlistStocks.length}');
+      });
+
+      GuideService().show(GuideStep(
+        id: 'watchlist_added',
+        title: 'Added to Watchlist! 📋',
+        message: "${stock['symbol']} added to your watchlist. Tap to view chart and trade!",
+      ));
+      Future.delayed(const Duration(seconds: 3), () => GuideService().hide());
+    } else {
+      print('Failed to add to watchlist');
+      GuideService().show(GuideStep(
+        id: 'watchlist_error',
+        title: 'Oops! 🦉',
+        message: "Failed to add ${stock['symbol']} to watchlist. Please try again.",
+      ));
+      Future.delayed(const Duration(seconds: 3), () => GuideService().hide());
+    }
+  }
+
+  void _removeFromWatchlist(Map<String, dynamic> stock) async {
+    final userDataService = UserDataService.instance;
+    final success = await userDataService.removeFromWatchlist(stock['symbol']);
+
+    if (success) {
+      setState(() {
+        _watchlistStocks.removeWhere((s) => s['symbol'] == stock['symbol']);
+      });
+
+      GuideService().show(GuideStep(
+        id: 'watchlist_removed',
+        title: 'Removed! 📋',
+        message: "${stock['symbol']} removed from your watchlist.",
+      ));
+      Future.delayed(const Duration(seconds: 2), () => GuideService().hide());
+    } else {
+      GuideService().show(GuideStep(
+        id: 'watchlist_remove_error',
+        title: 'Oops! 🦉',
+        message: "Failed to remove ${stock['symbol']} from watchlist.",
+      ));
+      Future.delayed(const Duration(seconds: 2), () => GuideService().hide());
+    }
   }
 
   bool _isInWatchlist(String symbol) {
-    return _watchlistStocks.any((s) => s['symbol'] == symbol);
+    final userDataService = UserDataService.instance;
+    return userDataService.isInWatchlist(symbol);
   }
 
   void _initRealTimeData() async {
     setState(() {
       _isLoading = true;
     });
-    
+
     try {
       // Connect to the real-time service
       _realTimeService.connect();
-      
+
       // Get initial data
       final mockData = _realTimeService.getMockStockData();
       setState(() {
         allAvailableStocks = mockData;
       });
-      
+
       // Listen for market updates
       _realTimeService.marketUpdates.listen((updatedStocks) {
         if (mounted) {
@@ -202,24 +463,24 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           });
         }
       });
-      
+
       // Listen for individual stock updates
       _realTimeService.stockUpdates.listen((stockUpdate) {
         if (mounted) {
           setState(() {
             final index = allAvailableStocks.indexWhere(
-              (stock) => stock['symbol'] == stockUpdate['symbol']
+                    (stock) => stock['symbol'] == stockUpdate['symbol']
             );
-            
+
             if (index != -1) {
               allAvailableStocks[index] = stockUpdate;
             }
-            
+
             // Also update watchlist if needed
             final watchlistIndex = _watchlistStocks.indexWhere(
-              (stock) => stock['symbol'] == stockUpdate['symbol']
+                    (stock) => stock['symbol'] == stockUpdate['symbol']
             );
-            
+
             if (watchlistIndex != -1) {
               _watchlistStocks[watchlistIndex] = stockUpdate;
             }
@@ -258,350 +519,79 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         onRemoveFromWatchlist: _removeFromWatchlist,
       ),
     );
-    // showModalBottomSheet(
-    //   context: context,
-    //   isScrollControlled: true,
-    //   backgroundColor: Colors.transparent,
-    //   builder: (context) => DraggableScrollableSheet(
-    //     initialChildSize: 0.7,
-    //     minChildSize: 0.5,
-    //     maxChildSize: 0.95,
-    //     builder: (context, scrollController) {
-    //       return Container(
-    //         decoration: BoxDecoration(
-    //           color: cardDark,
-    //           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-    //         ),
-    //         child: Column(
-    //           children: [
-    //             Container(
-    //               margin: const EdgeInsets.symmetric(vertical: 14),
-    //               width: 40,
-    //               height: 5,
-    //               decoration: BoxDecoration(
-    //                 color: borderColor,
-    //                 borderRadius: BorderRadius.circular(3),
-    //               ),
-    //             ),
-    //             Expanded(
-    //               child: SingleChildScrollView(
-    //                 controller: scrollController,
-    //                 physics: const BouncingScrollPhysics(),
-    //                 child: Padding(
-    //                   padding: const EdgeInsets.all(24),
-    //                   child: Column(
-    //                     crossAxisAlignment: CrossAxisAlignment.start,
-    //                     children: [
-    //                       Row(
-    //                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    //                         children: [
-    //                           Expanded(
-    //                             child: Column(
-    //                               crossAxisAlignment: CrossAxisAlignment.start,
-    //                               children: [
-    //                                 Text(
-    //                                   stock['symbol'],
-    //                                   style: const TextStyle(
-    //                                     color: textPrimary,
-    //                                     fontSize: 32,
-    //                                     fontWeight: FontWeight.w700,
-    //                                     letterSpacing: -1,
-    //                                   ),
-    //                                 ),
-    //                                 const SizedBox(height: 6),
-    //                                 Text(
-    //                                   stock['name'] ?? stock['symbol'],
-    //                                   style: const TextStyle(
-    //                                     color: textSecondary,
-    //                                     fontSize: 15,
-    //                                     fontWeight: FontWeight.w400,
-    //                                   ),
-    //                                 ),
-    //                               ],
-    //                             ),
-    //                           ),
-    //                           Container(
-    //                             decoration: BoxDecoration(
-    //                               color: cardLight,
-    //                               shape: BoxShape.circle,
-    //                             ),
-    //                             child: IconButton(
-    //                               onPressed: () => Navigator.pop(context),
-    //                               icon: const Icon(Icons.close_rounded, color: textSecondary),
-    //                             ),
-    //                           ),
-    //                         ],
-    //                       ),
-    //                       const SizedBox(height: 28),
-    //                       Container(
-    //                         padding: const EdgeInsets.all(24),
-    //                         decoration: BoxDecoration(
-    //                           color: cardLight,
-    //                           borderRadius: BorderRadius.circular(20),
-    //                         ),
-    //                         child: Column(
-    //                           crossAxisAlignment: CrossAxisAlignment.start,
-    //                           children: [
-    //                             const Text(
-    //                               'Current Price',
-    //                               style: TextStyle(
-    //                                 color: textTertiary,
-    //                                 fontSize: 13,
-    //                                 fontWeight: FontWeight.w500,
-    //                                 letterSpacing: 0.5,
-    //                               ),
-    //                             ),
-    //                             const SizedBox(height: 12),
-    //                             Row(
-    //                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
-    //                               crossAxisAlignment: CrossAxisAlignment.end,
-    //                               children: [
-    //                                 Text(
-    //                                   '₹${stock['price']}',
-    //                                   style: const TextStyle(
-    //                                     color: textPrimary,
-    //                                     fontSize: 40,
-    //                                     fontWeight: FontWeight.w700,
-    //                                     letterSpacing: -1.5,
-    //                                     height: 1.0,
-    //                                   ),
-    //                                 ),
-    //                                 Container(
-    //                                   padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-    //                                   decoration: BoxDecoration(
-    //                                     color: stock['isPositive'] ? positiveGreen.withOpacity(0.15) : negativeRed.withOpacity(0.15),
-    //                                     borderRadius: BorderRadius.circular(12),
-    //                                   ),
-    //                                   child: Text(
-    //                                     stock['change'],
-    //                                     style: TextStyle(
-    //                                       color: stock['isPositive'] ? positiveGreen : negativeRed,
-    //                                       fontSize: 17,
-    //                                       fontWeight: FontWeight.w700,
-    //                                     ),
-    //                                   ),
-    //                                 ),
-    //                               ],
-    //                             ),
-    //                           ],
-    //                         ),
-    //                       ),
-    //                       const SizedBox(height: 24),
-    //                       Container(
-    //                         height: 220,
-    //                         decoration: BoxDecoration(
-    //                           color: cardLight,
-    //                           borderRadius: BorderRadius.circular(20),
-    //                         ),
-    //                         child: Center(
-    //                           child: Column(
-    //                             mainAxisAlignment: MainAxisAlignment.center,
-    //                             children: [
-    //                               Icon(Icons.show_chart_rounded, color: accentOrange, size: 56),
-    //                               SizedBox(height: 14),
-    //                               Text(
-    //                                 'Stock Chart',
-    //                                 style: TextStyle(
-    //                                   color: textSecondary,
-    //                                   fontSize: 17,
-    //                                   fontWeight: FontWeight.w500,
-    //                                 ),
-    //                               ),
-    //                             ],
-    //                           ),
-    //                         ),
-    //                       ),
-    //                       const SizedBox(height: 28),
-    //                       const Text(
-    //                         'Key Statistics',
-    //                         style: TextStyle(
-    //                           color: textPrimary,
-    //                           fontSize: 20,
-    //                           fontWeight: FontWeight.w700,
-    //                           letterSpacing: -0.5,
-    //                         ),
-    //                       ),
-    //                       const SizedBox(height: 18),
-    //                       _buildStatRow('Volume', stock['volume'] ?? 'N/A'),
-    //                       _buildStatRow('Day High', '₹${stock['high'] ?? 'N/A'}'),
-    //                       _buildStatRow('Day Low', '₹${stock['low'] ?? 'N/A'}'),
-    //                       _buildStatRow('Open', '₹${stock['open'] ?? 'N/A'}'),
-    //                       _buildStatRow('Market Cap', stock['marketCap'] ?? 'N/A'),
-    //                       _buildStatRow('P/E Ratio', stock['pe'] ?? 'N/A'),
-    //                       const SizedBox(height: 28),
-    //                       Row(
-    //                         children: [
-    //                           Expanded(
-    //                             child: Container(
-    //                               height: 56,
-    //                               decoration: BoxDecoration(
-    //                                 gradient: LinearGradient(
-    //                                   colors: [accentOrange, accentOrangeDim],
-    //                                 ),
-    //                                 borderRadius: BorderRadius.circular(16),
-    //                                 boxShadow: [
-    //                                   BoxShadow(
-    //                                     color: accentOrange.withOpacity(0.3),
-    //                                     blurRadius: 12,
-    //                                     offset: Offset(0, 4),
-    //                                   ),
-    //                                 ],
-    //                               ),
-    //                               child: ElevatedButton(
-    //                                 onPressed: () {},
-    //                                 style: ElevatedButton.styleFrom(
-    //                                   backgroundColor: Colors.transparent,
-    //                                   foregroundColor: darkBg,
-    //                                   elevation: 0,
-    //                                   shadowColor: Colors.transparent,
-    //                                   shape: RoundedRectangleBorder(
-    //                                     borderRadius: BorderRadius.circular(16),
-    //                                   ),
-    //                                 ),
-    //                                 child: const Text(
-    //                                   'BUY',
-    //                                   style: TextStyle(
-    //                                     fontSize: 17,
-    //                                     fontWeight: FontWeight.w700,
-    //                                     letterSpacing: 1,
-    //                                   ),
-    //                                 ),
-    //                               ),
-    //                             ),
-    //                           ),
-    //                           const SizedBox(width: 14),
-    //                           Expanded(
-    //                             child: Container(
-    //                               height: 56,
-    //                               decoration: BoxDecoration(
-    //                                 border: Border.all(color: negativeRed.withOpacity(0.5), width: 2),
-    //                                 borderRadius: BorderRadius.circular(16),
-    //                               ),
-    //                               child: ElevatedButton(
-    //                                 onPressed: () {},
-    //                                 style: ElevatedButton.styleFrom(
-    //                                   backgroundColor: Colors.transparent,
-    //                                   foregroundColor: negativeRed,
-    //                                   elevation: 0,
-    //                                   shadowColor: Colors.transparent,
-    //                                   shape: RoundedRectangleBorder(
-    //                                     borderRadius: BorderRadius.circular(16),
-    //                                   ),
-    //                                 ),
-    //                                 child: const Text(
-    //                                   'SELL',
-    //                                   style: TextStyle(
-    //                                     fontSize: 17,
-    //                                     fontWeight: FontWeight.w700,
-    //                                     letterSpacing: 1,
-    //                                   ),
-    //                                 ),
-    //                               ),
-    //                             ),
-    //                           ),
-    //                         ],
-    //                       ),
-    //                       const SizedBox(height: 50),
-    //                     ],
-    //                   ),
-    //                 ),
-    //               ),
-    //             ),
-    //           ],
-    //         ),
-    //       );
-    //     },
-    //   ),
-    // );
-  }
-
-  Widget _buildStatRow(String label, String value) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 16),
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: borderColor, width: 1)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(
-              color: textSecondary,
-              fontSize: 16,
-              fontWeight: FontWeight.w400,
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: textPrimary,
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: darkBg,
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 24),
-                        _buildSearchBar(),
-                        if (_isSearching) ...[
-                          const SizedBox(height: 28),
-                          _buildSearchResults(),
-                        ] else ...[
-                          const SizedBox(height: 28),
-                          _buildCarouselSection(),
-                          const SizedBox(height: 28),
-                          _buildWatchlistSection(),
-                        ],
-                        const SizedBox(height: 100),
-                      ],
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Center(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(maxWidth: maxWidth),
+                child: Column(
+                  children: [
+                    _buildHeader(),
+                    Expanded(
+                      child: SingleChildScrollView(
+                        physics: const BouncingScrollPhysics(),
+                        child: Column(
+                          children: [
+                            const SizedBox(height: 24),
+                            _buildSearchBar(),
+                            if (_isSearching) ...[
+                              const SizedBox(height: 28),
+                              _buildSearchResults(),
+                            ] else ...[
+                              const SizedBox(height: 28),
+                              _buildPortfolioSummary(),
+                              const SizedBox(height: 28),
+                              _buildCarouselSection(),
+                              const SizedBox(height: 28),
+                              _buildWatchlistSection(),
+                            ],
+                            const SizedBox(height: 100),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
-        ),
-      ),
-      // 👇 Add this FAB
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: accentOrange,
-        onPressed: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(builder: (context) => const ChatScreen()),
-          );
-        },
-        child: const Icon(Icons.chat, color: Colors.white),
+          // Owl chat AI overlay
+          Positioned(
+            right: 16,
+            bottom: 24,
+            child: OwlCoach(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ChatScreen()),
+                );
+              },
+            ),
+          ),
+          // Tip bubble overlay
+          if (_showSimpleTip)
+            SimpleTipWidget(
+              title: _tipTitle,
+              message: _tipMessage,
+              onClose: _hideSimpleTip,
+            ),
+        ],
       ),
       bottomNavigationBar: _buildBottomNavigation(),
-
     );
   }
 
   Widget _buildHeader() {
     return Container(
       padding: EdgeInsets.fromLTRB(horizontalPadding, 16, horizontalPadding, 16),
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: darkBg,
       ),
       child: FadeTransition(
@@ -612,7 +602,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
+                const Text(
                   'Good morning,',
                   style: TextStyle(
                     fontSize: 14,
@@ -633,15 +623,23 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            Container(
-              decoration: BoxDecoration(
-                color: cardDark,
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: textSecondary, size: 26),
-                onPressed: () {},
-              ),
+            Row(
+              children: [
+                const SizedBox(width: 8),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: cardDark,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.campaign_outlined, color: textSecondary, size: 24),
+                    tooltip: 'View IPOs',
+                    onPressed: () {
+                      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const IpoScreen()));
+                    },
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -662,6 +660,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ? Border.all(color: accentOrange.withOpacity(0.5), width: 1.5)
                 : null,
           ),
+          key: _searchKey,
           child: TextField(
             controller: _searchController,
             style: const TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.w500),
@@ -712,11 +711,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           if (_filteredStocks.isEmpty)
             Container(
               padding: const EdgeInsets.all(50),
-              child: Center(
+              child: const Center(
                 child: Column(
                   children: [
                     Icon(Icons.search_off_rounded, size: 56, color: textTertiary),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       'No stocks found',
                       style: TextStyle(
@@ -725,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       'Try searching with different keywords',
                       style: TextStyle(
@@ -749,7 +748,10 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
     final bool inWatchlist = _isInWatchlist(stock['symbol']);
 
     return GestureDetector(
-      onTap: () => _showStockDetails(stock),
+      onTap: () {
+        GuideService().complete('open_stock_details', award: 30);
+        _showStockDetails(stock);
+      },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
         padding: const EdgeInsets.all(20),
@@ -820,7 +822,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             Container(
               height: 44,
               decoration: BoxDecoration(
-                gradient: inWatchlist ? null : LinearGradient(
+                gradient: inWatchlist ? null : const LinearGradient(
                   colors: [accentOrange, accentOrangeDim],
                 ),
                 color: inWatchlist ? cardLight : null,
@@ -829,7 +831,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   BoxShadow(
                     color: accentOrange.withOpacity(0.3),
                     blurRadius: 8,
-                    offset: Offset(0, 2),
+                    offset: const Offset(0, 2),
                   ),
                 ],
               ),
@@ -853,7 +855,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 ),
                 child: Text(
                   inWatchlist ? 'Added' : 'Add',
-                  style: TextStyle(
+                  style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.5,
@@ -897,7 +899,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         BoxShadow(
                           color: accentOrange.withOpacity(0.3),
                           blurRadius: 12,
-                          offset: Offset(0, 4),
+                          offset: const Offset(0, 4),
                         ),
                       ] : [],
                     ),
@@ -1004,13 +1006,32 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Your Watchlist',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  color: textPrimary,
-                  letterSpacing: -0.5,
+              GestureDetector(
+                onTap: () {
+                  GuideService().show(GuideStep(
+                    id: 'watchlist_tip',
+                    title: 'Your Watchlist 📋',
+                    message: 'Add stocks here to track them easily! Tap the bookmark icon on any stock to add it.',
+                  ));
+                },
+                child: const Row(
+                  children: [
+                    Text(
+                      'Your Watchlist',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: textPrimary,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+                    SizedBox(width: 8),
+                    Icon(
+                      Icons.info_outline,
+                      size: 16,
+                      color: textSecondary,
+                    ),
+                  ],
                 ),
               ),
             ],
@@ -1023,11 +1044,11 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                 color: cardDark,
                 borderRadius: BorderRadius.circular(20),
               ),
-              child: Center(
+              child: const Center(
                 child: Column(
                   children: [
                     Icon(Icons.bookmark_border_rounded, size: 56, color: textTertiary),
-                    const SizedBox(height: 16),
+                    SizedBox(height: 16),
                     Text(
                       'No stocks in watchlist',
                       style: TextStyle(
@@ -1036,7 +1057,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                         fontWeight: FontWeight.w500,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    SizedBox(height: 8),
                     Text(
                       'Search and add stocks to track them',
                       style: TextStyle(
@@ -1100,7 +1121,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
                   ),
                 ),
                 Container(
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: cardLight,
                     shape: BoxShape.circle,
                   ),
@@ -1160,7 +1181,7 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
 
   Widget _buildBottomNavigation() {
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: cardDark,
         border: Border(top: BorderSide(color: borderColor, width: 1)),
       ),
@@ -1170,17 +1191,34 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
           setState(() {
             _selectedBottomNavIndex = index;
           });
+
+          // Show tips for different sections
           switch (index) {
             case 0:
-            // Home
+            // Home - stay on current screen
+              GuideService().show(GuideStep(
+                id: 'home_nav_tip',
+                title: 'Home Sweet Home 🏠',
+                message: 'You\'re on the main screen! Search stocks, check your portfolio, and manage your watchlist here.',
+              ));
               break;
             case 1:
+              GuideService().show(GuideStep(
+                id: 'portfolio_nav_tip',
+                title: 'Portfolio Time! 💼',
+                message: 'Let\'s check your investments! This shows all your stock holdings and trading history.',
+              ));
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => PortfolioScreen()),
+                MaterialPageRoute(builder: (context) => const PortfolioScreen()),
               );
               break;
             case 2:
+              GuideService().show(GuideStep(
+                id: 'learn_nav_tip',
+                title: 'Learning Hub 📚',
+                message: 'Ready to learn? This section has tutorials, articles, and quizzes to improve your trading skills!',
+              ));
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -1188,16 +1226,26 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
               );
               break;
             case 3:
+              GuideService().show(GuideStep(
+                id: 'leaderboard_nav_tip',
+                title: 'Competition Time! 🏆',
+                message: 'See how you rank against other traders! Compete and climb the leaderboard!',
+              ));
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => LeaderBoardScreen()),
+                MaterialPageRoute(builder: (context) => const LeaderBoardScreen()),
               );
               break;
             case 4:
+              GuideService().show(GuideStep(
+                id: 'profile_nav_tip',
+                title: 'Your Profile 👤',
+                message: 'Manage your account settings, view your stats, and customize your trading experience!',
+              ));
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                    builder: (context) => PracticeScreen(username: widget.username)),
+                    builder: (context) => const Profilepage()),
               );
               break;
           }
@@ -1208,8 +1256,8 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
         unselectedItemColor: textSecondary,
         selectedFontSize: 12,
         unselectedFontSize: 12,
-        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600),
-        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w400),
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600),
+        unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.w400),
         elevation: 0,
         items: const [
           BottomNavigationBarItem(
@@ -1229,15 +1277,46 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             label: 'Leaderboard',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.show_chart_rounded, size: 26),
-            label: 'Practice',
+            icon: Icon(Icons.person_rounded, size: 26),
+            label: 'Profile',
           ),
         ],
       ),
     );
   }
+}
 
+// CoachOverlay widget - assuming this is defined elsewhere, but adding a placeholder if needed
 
+class OwlCoach extends StatelessWidget {
+  final VoidCallback onTap;
 
+  const OwlCoach({super.key, required this.onTap});
 
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 60,
+        height: 60,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFF9500), Color(0xFFCC7700)],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: const Color(0xFFFF9500).withOpacity(0.4),
+              blurRadius: 12,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Center(
+          child: OwlCharacter(size: 56.0),
+        ),
+      ),
+    );
+  }
 }

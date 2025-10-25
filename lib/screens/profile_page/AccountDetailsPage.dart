@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class AccountDetailsPage extends StatefulWidget {
   const AccountDetailsPage({super.key});
@@ -23,31 +25,86 @@ class _AccountDetailsPageState extends State<AccountDetailsPage> {
   final Color positiveGreen = const Color(0xFF00E676);
   final Color negativeRed = const Color(0xFFFF5252);
 
-  // User account data
-  final String userName = "Aryan Niraj Srivastava";
-  final String userEmail = "aryan.srivastava@example.com";
-  final String userPhone = "+91 98765 43210";
-  final String userPAN = "ABCDE1234F";
-  final String userDOB = "15 March 1998";
-  final String userGender = "Male";
+  // Firebase instances
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // Trading account data
-  final String tradingAccountId = "TR1234567890";
-  final String dematAccountId = "IN30123456789012";
-  final String dpId = "IN301234";
-  final String clientId = "56789012";
-  final String accountStatus = "Active";
-  final String kycStatus = "Verified";
-  final String accountOpenDate = "20 January 2023";
+  // User account data (runtime-loaded)
+  String userName = "";
+  String userEmail = "";
+  String userPhone = "";
+  String userPAN = "";
+  String userDOB = "";
+  String userGender = "";
 
-  // Bank details
-  final String bankName = "HDFC Bank";
-  final String accountNumber = "1234567890123456";
-  final String ifscCode = "HDFC0001234";
-  final String accountType = "Savings";
+  // Trading account data (runtime-loaded)
+  String tradingAccountId = "";
+  String dematAccountId = "";
+  String dpId = "";
+  String clientId = "";
+  String accountStatus = "";
+  String kycStatus = "";
+  String accountOpenDate = "";
 
-  // Segments enabled
-  final List<String> enabledSegments = ["Equity", "F&O", "Currency", "Commodity"];
+  // Bank details (runtime-loaded)
+  String bankName = "";
+  String accountNumber = "";
+  String ifscCode = "";
+  String accountType = "";
+
+  // Segments enabled (runtime-loaded)
+  List<String> enabledSegments = const [];
+
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserDetails();
+  }
+
+  Future<void> _loadUserDetails() async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      setState(() { _loading = false; });
+      return;
+    }
+    try {
+      final doc = await _firestore.collection('users').doc(user.uid).get();
+      final data = doc.data() ?? {};
+      setState(() {
+        userEmail = user.email ?? '';
+        userName = (data['fullName'] as String?) ?? user.email?.split('@').first ?? '';
+        userPhone = (data['phone'] as String?) ?? '';
+        userPAN = (data['pan'] as String?) ?? '';
+        userDOB = (data['dob'] as String?) ?? '';
+        userGender = (data['gender'] as String?) ?? '';
+
+        tradingAccountId = (data['tradingAccountId'] as String?) ?? '';
+        dematAccountId = (data['dematAccountId'] as String?) ?? '';
+        dpId = (data['dpId'] as String?) ?? '';
+        clientId = (data['clientId'] as String?) ?? '';
+        accountStatus = (data['accountStatus'] as String?) ?? '';
+        kycStatus = (data['kycStatus'] as String?) ?? '';
+        accountOpenDate = (data['accountOpenDate'] as String?) ?? '';
+
+        bankName = (data['bankName'] as String?) ?? '';
+        accountNumber = (data['accountNumber'] as String?) ?? '';
+        ifscCode = (data['ifscCode'] as String?) ?? '';
+        accountType = (data['accountType'] as String?) ?? '';
+
+        final seg = data['enabledSegments'];
+        enabledSegments = seg is List ? seg.map((e) => e.toString()).toList() : const [];
+
+        _loading = false;
+      });
+    } catch (e) {
+      setState(() { _loading = false; });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load account details: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,39 +117,41 @@ class _AccountDetailsPageState extends State<AccountDetailsPage> {
         child: Center(
           child: ConstrainedBox(
             constraints: BoxConstraints(maxWidth: maxWidth),
-            child: Column(
-              children: [
-                _buildHeader(),
-                Expanded(
-                  child: SingleChildScrollView(
-                    physics: const BouncingScrollPhysics(),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          _buildSectionTitle("Personal Information"),
-                          _buildPersonalInfoCard(),
-                          const SizedBox(height: 24),
-                          _buildSectionTitle("Trading Account"),
-                          _buildTradingAccountCard(),
-                          const SizedBox(height: 24),
-                          _buildSectionTitle("Bank Details"),
-                          _buildBankDetailsCard(),
-                          const SizedBox(height: 24),
-                          _buildSectionTitle("Segments Enabled"),
-                          _buildSegmentsCard(),
-                          const SizedBox(height: 24),
-                          _buildSectionTitle("Account Settings"),
-                          _buildAccountSettingsCard(),
-                          const SizedBox(height: 24),
-                        ],
+            child: _loading 
+                ? const Center(child: CircularProgressIndicator())
+                : Column(
+                    children: [
+                      _buildHeader(),
+                      Expanded(
+                        child: SingleChildScrollView(
+                          physics: const BouncingScrollPhysics(),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionTitle("Personal Information"),
+                                _buildPersonalInfoCard(),
+                                const SizedBox(height: 24),
+                                _buildSectionTitle("Trading Account"),
+                                _buildTradingAccountCard(),
+                                const SizedBox(height: 24),
+                                _buildSectionTitle("Bank Details"),
+                                _buildBankDetailsCard(),
+                                const SizedBox(height: 24),
+                                _buildSectionTitle("Segments Enabled"),
+                                _buildSegmentsCard(),
+                                const SizedBox(height: 24),
+                                _buildSectionTitle("Account Settings"),
+                                _buildAccountSettingsCard(),
+                                const SizedBox(height: 24),
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
+                    ],
                   ),
-                ),
-              ],
-            ),
           ),
         ),
       ),
@@ -722,10 +781,12 @@ class _AccountDetailsPageState extends State<AccountDetailsPage> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              print("User logged out");
-              // Handle logout logic
+              await FirebaseAuth.instance.signOut();
+              if (mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              }
             },
             child: Text(
               "Logout",

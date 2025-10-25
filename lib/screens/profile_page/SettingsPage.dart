@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:firebase_auth/firebase_auth.dart';
+import '../../services/user_data_service.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
@@ -765,9 +767,19 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(context);
-              print("User logged out");
+              
+              // Clear user data from SharedPreferences
+              final userDataService = UserDataService.instance;
+              await userDataService.logout();
+              
+              // Sign out from Firebase
+              await FirebaseAuth.instance.signOut();
+              
+              if (mounted) {
+                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+              }
             },
             child: Text(
               "Logout",

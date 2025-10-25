@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class LeaderBoardScreen extends StatefulWidget {
   const LeaderBoardScreen({super.key});
@@ -22,70 +24,32 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
   double get horizontalPadding => isWeb ? 40 : 20;
   double get cardBorderRadius => isWeb ? 20 : 30;
 
-  // Sample leaderboard data
-  final List<LeaderboardEntry> leaderboardData = [
-    LeaderboardEntry(
-      rank: 1,
-      username: "TradingMaster",
-      portfolioValue: 125000,
-      totalReturn: 25.5,
-      level: 8,
-      streak: 15,
-      badge: "🏆",
-      experience: 2450,
-    ),
-    LeaderboardEntry(
-      rank: 2,
-      username: "StockNinja",
-      portfolioValue: 118500,
-      totalReturn: 18.5,
-      level: 7,
-      streak: 12,
-      badge: "🥈",
-      experience: 2180,
-    ),
-    LeaderboardEntry(
-      rank: 3,
-      username: "InvestorPro",
-      portfolioValue: 112300,
-      totalReturn: 12.3,
-      level: 6,
-      streak: 8,
-      badge: "🥉",
-      experience: 1890,
-    ),
-    LeaderboardEntry(
-      rank: 4,
-      username: "BullRunner",
-      portfolioValue: 108900,
-      totalReturn: 8.9,
-      level: 5,
-      streak: 6,
-      badge: "💎",
-      experience: 1650,
-    ),
-    LeaderboardEntry(
-      rank: 5,
-      username: "MarketExplorer",
-      portfolioValue: 105200,
-      totalReturn: 5.2,
-      level: 5,
-      streak: 4,
-      badge: "⭐",
-      experience: 1420,
-    ),
-    LeaderboardEntry(
-      rank: 6,
-      username: "You",
-      portfolioValue: 100000,
-      totalReturn: 0.0,
-      level: 1,
-      streak: 0,
-      badge: "🌱",
-      experience: 100,
-      isCurrentUser: true,
-    ),
-  ];
+  Stream<List<LeaderboardEntry>> _leaderboardStream() {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .orderBy('points', descending: true)
+        .limit(100)
+        .snapshots()
+        .map((snap) {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      int rank = 0;
+      return snap.docs.map((d) {
+        rank++;
+        final data = d.data();
+        return LeaderboardEntry(
+          rank: rank,
+          username: (data['username'] ?? 'User') as String,
+          portfolioValue: (data['totalValue'] as num?)?.toDouble() ?? 0,
+          totalReturn: 0.0, // optional: compute from invested vs totalValue
+          level: 1, // optional: map points to levels
+          streak: 0, // optional
+          badge: rank == 1 ? '🏆' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '⭐',
+          experience: (data['points'] as num?)?.toInt() ?? 0,
+          isCurrentUser: d.id == uid,
+        );
+      }).toList();
+    });
+  }
 
   @override
   void initState() {
@@ -149,31 +113,32 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
 
                   // Leaderboard content
                   Expanded(
-                    child: SingleChildScrollView(
-                      child: Padding(
-                        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
-                        child: Column(
-                          children: [
-                            const SizedBox(height: 20),
-
-                            // Top 3 podium
-                            FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: _buildPodium(),
+                    child: StreamBuilder<List<LeaderboardEntry>>(
+                      stream: _leaderboardStream(),
+                      builder: (context, snapshot) {
+                        final entries = snapshot.data ?? [];
+                        return SingleChildScrollView(
+                          child: Padding(
+                            padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+                            child: Column(
+                              children: [
+                                const SizedBox(height: 20),
+                                if (entries.isNotEmpty)
+                                  FadeTransition(
+                                    opacity: _fadeAnimation,
+                                    child: _buildPodium(entries.take(3).toList()),
+                                  ),
+                                const SizedBox(height: 30),
+                                FadeTransition(
+                                  opacity: _fadeAnimation,
+                                  child: _buildLeaderboardList(entries),
+                                ),
+                                const SizedBox(height: 20),
+                              ],
                             ),
-
-                            const SizedBox(height: 30),
-
-                            // Full leaderboard list
-                            FadeTransition(
-                              opacity: _fadeAnimation,
-                              child: _buildLeaderboardList(),
-                            ),
-
-                            const SizedBox(height: 20),
-                          ],
-                        ),
-                      ),
+                          ),
+                        );
+                      },
                     ),
                   ),
                 ],
@@ -236,9 +201,7 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
     );
   }
 
-  Widget _buildPodium() {
-    final top3 = leaderboardData.take(3).toList();
-
+  Widget _buildPodium(List<LeaderboardEntry> top3) {
     return Container(
       height: 180,
       margin: const EdgeInsets.symmetric(horizontal: 20),
@@ -339,7 +302,7 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
     );
   }
 
-  Widget _buildLeaderboardList() {
+  Widget _buildLeaderboardList(List<LeaderboardEntry> entries) {
     return Column(
       children: [
         // Header
@@ -366,7 +329,7 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
         ),
 
         // List items
-        ...leaderboardData.map((entry) => _buildLeaderboardItem(entry)),
+        ...entries.map((entry) => _buildLeaderboardItem(entry)),
       ],
     );
   }
