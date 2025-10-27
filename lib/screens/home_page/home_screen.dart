@@ -10,6 +10,7 @@ import '../../model/stock_model.dart';
 import '../../services/real_time_service.dart';
 import '../../services/guide_service.dart';
 import '../../services/user_data_service.dart';
+import '../../services/portfolio_service.dart';
 import '../leader_board_screen.dart';
 import '../profile_page/ProfilePage.dart';
 import '../ipo_screen.dart';
@@ -137,6 +138,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     _loadUserData().then((_) {
       _initRealTimeData();
     });
+
+    // Ensure portfolio state is hydrated (local + Firestore override)
+    PortfolioService().load();
   }
 
   void _onSearchChanged() {
@@ -233,131 +237,139 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildPortfolioSummary() {
-    final userDataService = UserDataService.instance;
-    final portfolioSummary = userDataService.getPortfolioSummary();
-
-    return GestureDetector(
-      onTap: () {
-        GuideService().show(GuideStep(
-          id: 'portfolio_tip',
-          title: 'Your Portfolio 💼',
-          message: 'This shows your virtual money and investments. Start with ₹10,000 and try buying some stocks!',
-        ));
-      },
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [cardDark, cardLight],
-          ),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: borderColor, width: 1),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Text(
-                  'Portfolio Summary',
-                  style: TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                    color: textPrimary,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.info_outline, size: 16, color: textSecondary),
-                  tooltip: 'Show info',
-                  onPressed: () {
-                    GuideService().show(
-                      GuideStep(
-                        id: 'portfolio_summary_tip',
-                        title: 'Portfolio Summary Info',
-                        message: 'This shows virtual money, total invested, holdings, and total value.',
-                      ),
-                    );
-                    Future.delayed(const Duration(seconds: 4), () {
-                      GuideService().showNextTip(context);
-                    });
-                  },
-                ),
-              ],
+    // Use PortfolioService for accurate, persisted portfolio values
+    final portfolio = PortfolioService();
+    return StreamBuilder<PortfolioState>(
+      stream: portfolio.stream,
+      initialData: portfolio.state,
+      builder: (context, snapshot) {
+        final s = snapshot.data!;
+        return GestureDetector(
+          onTap: () {
+            GuideService().show(GuideStep(
+              id: 'portfolio_tip',
+              title: 'Your Portfolio 💼',
+              message:
+                  'This shows your virtual money and investments. Start with ₹10,000 and try buying some stocks!',
+            ));
+          },
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [cardDark, cardLight],
+              ),
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: borderColor, width: 1),
             ),
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                Row(
                   children: [
                     const Text(
-                      'Virtual Money',
+                      'Portfolio Summary',
                       style: TextStyle(
-                        fontSize: 14,
-                        color: textSecondary,
-                      ),
-                    ),
-                    Text(
-                      '₹${portfolioSummary['virtualMoney'].toStringAsFixed(2)}',
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
                         color: textPrimary,
                       ),
                     ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: const Icon(Icons.info_outline, size: 16, color: textSecondary),
+                      tooltip: 'Show info',
+                      onPressed: () {
+                        GuideService().show(
+                          GuideStep(
+                            id: 'portfolio_summary_tip',
+                            title: 'Portfolio Summary Info',
+                            message:
+                                'This shows virtual money, total invested, holdings, and total value.',
+                          ),
+                        );
+                        Future.delayed(const Duration(seconds: 4), () {
+                          GuideService().showNextTip(context);
+                        });
+                      },
+                    ),
                   ],
                 ),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
+                const SizedBox(height: 12),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Text(
-                      'Total Invested',
-                      style: TextStyle(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Virtual Money',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '₹${s.cashBalance.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: textPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'Total Invested',
+                          style: TextStyle(
+                            fontSize: 14,
+                            color: textSecondary,
+                          ),
+                        ),
+                        Text(
+                          '₹${s.invested.toStringAsFixed(2)}',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: accentOrange,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Holdings: ${s.holdings.length}',
+                      style: const TextStyle(
                         fontSize: 14,
                         color: textSecondary,
                       ),
                     ),
                     Text(
-                      '₹${portfolioSummary['totalInvested'].toStringAsFixed(2)}',
+                      'Total Value: ₹${s.totalValue.toStringAsFixed(2)}',
                       style: const TextStyle(
-                        fontSize: 16,
+                        fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: accentOrange,
+                        color: positiveGreen,
                       ),
                     ),
                   ],
                 ),
               ],
             ),
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  'Holdings: ${portfolioSummary['holdingsCount']}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    color: textSecondary,
-                  ),
-                ),
-                Text(
-                  'Total Value: ₹${portfolioSummary['totalValue'].toStringAsFixed(2)}',
-                  style: const TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: positiveGreen,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
