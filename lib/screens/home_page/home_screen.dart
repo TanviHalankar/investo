@@ -71,6 +71,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   double get maxWidth => isWeb ? 600 : double.infinity;
   double get horizontalPadding => isWeb ? 40 : 20;
 
+  // Helper: safely determine trend positivity
+  bool _stockIsPositive(Map<String, dynamic> stock) {
+    final v = stock['isPositive'];
+    if (v is bool) return v;
+    final change = stock['change']?.toString() ?? '';
+    return change.startsWith('+');
+  }
+
   List<String> carouselCategories = [
     'Top Gainers',
     'Top Losers',
@@ -171,6 +179,14 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // Load watchlist from user data
         final watchlist = userDataService.getWatchlist();
 
+        // Normalize: ensure isPositive is present or derived
+        final normalizedWatchlist = watchlist.map((s) {
+          final v = s['isPositive'];
+          if (v is bool) return s;
+          final change = s['change']?.toString() ?? '';
+          return {...s, 'isPositive': change.startsWith('+')};
+        }).toList();
+
         print('Loaded user data for: ${currentUser.username}');
         print('User preferences: $userPreferences');
         print('User portfolio: $userPortfolio');
@@ -180,7 +196,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         // Update UI based on user data
         setState(() {
           _watchlistStocks.clear();
-          _watchlistStocks.addAll(watchlist);
+          _watchlistStocks.addAll(normalizedWatchlist);
           print('Updated _watchlistStocks: ${_watchlistStocks.length} items');
         });
 
@@ -365,8 +381,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         );
       }
 
-      // Refresh user data
-      _loadUserData();
+      // Refresh user data and force rebuild so summary reflects changes
+      await _loadUserData();
+      if (mounted) setState(() {});
     } else {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -382,21 +399,41 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void _addToWatchlist(Map<String, dynamic> stock) async {
     print('Adding ${stock['symbol']} to watchlist...');
     final userDataService = UserDataService.instance;
-    final success = await userDataService.addToWatchlist(stock);
+
+    // Ensure user is hydrated before adding
+    if (userDataService.currentUser == null) {
+      print('No current user in cache; hydrating from remote...');
+      await userDataService.loadFromRemote();
+    }
+
+    // Normalize stock payload for persistence
+    final normalized = {
+      'symbol': stock['symbol']?.toString() ?? '',
+      'name': stock['name']?.toString() ?? (stock['symbol']?.toString() ?? ''),
+      'price': (() {
+        final p = stock['price'];
+        if (p is num) return p.toDouble();
+        if (p is String) return double.tryParse(p.replaceAll(',', '')) ?? p;
+        return p;
+      })(),
+      'change': stock['change']?.toString() ?? '',
+    };
+
+    final success = await userDataService.addToWatchlist(normalized);
 
     print('Add to watchlist result: $success');
     if (success) {
       // Subscribe to real-time updates for this stock
-      _realTimeService.subscribeToStock(stock['symbol']);
+      _realTimeService.subscribeToStock(normalized['symbol']);
       setState(() {
-        _watchlistStocks.add(stock);
+        _watchlistStocks.add(normalized);
         print('Added to local watchlist. Total items: ${_watchlistStocks.length}');
       });
 
       GuideService().show(GuideStep(
         id: 'watchlist_added',
         title: 'Added to Watchlist! 📋',
-        message: "${stock['symbol']} added to your watchlist. Tap to view chart and trade!",
+        message: "${normalized['symbol']} added to your watchlist. Tap to view chart and trade!",
       ));
       Future.delayed(const Duration(seconds: 3), () => GuideService().hide());
     } else {
@@ -404,7 +441,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       GuideService().show(GuideStep(
         id: 'watchlist_error',
         title: 'Oops! 🦉',
-        message: "Failed to add ${stock['symbol']} to watchlist. Please try again.",
+        message: "Failed to add ${normalized['symbol']} to watchlist. Please try again.",
       ));
       Future.delayed(const Duration(seconds: 3), () => GuideService().hide());
     }
@@ -801,13 +838,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: stock['isPositive'] ? positiveGreen.withOpacity(0.15) : negativeRed.withOpacity(0.15),
+                          color: _stockIsPositive(stock) ? positiveGreen.withOpacity(0.15) : negativeRed.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(8),
                         ),
                         child: Text(
                           stock['change'],
                           style: TextStyle(
-                            color: stock['isPositive'] ? positiveGreen : negativeRed,
+                            color: _stockIsPositive(stock) ? positiveGreen : negativeRed,
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1091,85 +1128,43 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         child: Column(
           children: [
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        stock['symbol'],
-                        style: const TextStyle(
-                          color: textPrimary,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        stock['name'],
-                        style: const TextStyle(
-                          color: textSecondary,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
-                        ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                Text(
+                  stock['symbol'],
+                  style: const TextStyle(
+                    color: textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.3,
                   ),
                 ),
-                Container(
-                  decoration: const BoxDecoration(
-                    color: cardLight,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.star_rounded, color: accentOrange),
-                    onPressed: () => _removeFromWatchlist(stock),
-                  ),
+                Icon(
+                  _stockIsPositive(stock) ? Icons.trending_up_rounded : Icons.trending_down_rounded,
+                  color: _stockIsPositive(stock) ? positiveGreen : negativeRed,
+                  size: 24,
                 ),
               ],
             ),
-            const SizedBox(height: 20),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '₹${stock['price']}',
-                      style: const TextStyle(
-                        color: textPrimary,
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: -0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: stock['isPositive'] ? positiveGreen.withOpacity(0.15) : negativeRed.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        stock['change'],
-                        style: TextStyle(
-                          color: stock['isPositive'] ? positiveGreen : negativeRed,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                Text(
+                  '₹${stock['price']}',
+                  style: const TextStyle(
+                    color: textPrimary,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                Icon(
-                  stock['isPositive'] ? Icons.trending_up_rounded : Icons.trending_down_rounded,
-                  color: stock['isPositive'] ? positiveGreen : negativeRed,
-                  size: 32,
+                const SizedBox(height: 6),
+                Text(
+                  stock['change'],
+                  style: TextStyle(
+                    color: _stockIsPositive(stock) ? positiveGreen : negativeRed,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),

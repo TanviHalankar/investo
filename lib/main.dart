@@ -8,6 +8,7 @@ import 'package:investo/services/user_data_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'firebase_options.dart';
 import 'screens/login_screens/login_screen.dart';
+import 'screens/login_screens/register_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/home_page/home_screen.dart';
 import 'widgets/coach_overlay.dart';
@@ -56,8 +57,8 @@ class MyApp extends StatelessWidget {
         // Get current route name
         final currentRoute = ModalRoute.of(context)?.settings.name ?? '';
         
-        // Show owl everywhere except onboarding and login
-        final showOwl = currentRoute != '/onboarding' && currentRoute != '/login';
+        // Show owl everywhere except onboarding, login, and register
+        final showOwl = currentRoute != '/onboarding' && currentRoute != '/login' && currentRoute != '/register';
         
         return Stack(
           children: [
@@ -79,6 +80,7 @@ class MyApp extends StatelessWidget {
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
         '/login': (context) => const LoginScreen(),
+        '/register': (context) => const RegisterScreen(),
         // Use route argument to pass username properly
         '/home': (context) => HomeScreen.fromRoute(context),
       },
@@ -107,31 +109,20 @@ class AuthGate extends StatelessWidget {
         if (user == null) {
           return const LoginScreen();
         }
-        
-        // Get user data from SharedPreferences
-        final userDataService = UserDataService.instance;
-        final currentUser = userDataService.currentUser;
-        
-        if (currentUser != null) {
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            Navigator.pushReplacementNamed(
-              context,
-              '/home',
-              arguments: currentUser.username,
-            );
-          });
-          return const SizedBox.shrink();
-        } else {
-          final username = user.email?.split('@').first ?? 'User';
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+
+        // Hydrate from Firestore, then navigate when done
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          UserDataService.instance.loadFromRemote().whenComplete(() {
+            final currentUser = UserDataService.instance.currentUser;
+            final username = currentUser?.username ?? (user.email?.split('@').first ?? 'User');
             Navigator.pushReplacementNamed(
               context,
               '/home',
               arguments: username,
             );
           });
-          return const SizedBox.shrink();
-        }
+        });
+        return const SizedBox.shrink();
       },
     );
   }

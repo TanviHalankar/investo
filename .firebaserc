@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "investo-71002",
+    "default": "investo-flutter",
     "dev": "investo-flutter"
   },
   "targets": {},

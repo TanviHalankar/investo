@@ -51,6 +51,9 @@ class _ProfilepageState extends State<Profilepage> {
 
   bool _loading = true;
 
+  // Watchlist items loaded from Firestore subcollection
+  List<Map<String, dynamic>> _watchlist = [];
+
   @override
   void initState() {
     super.initState();
@@ -66,12 +69,21 @@ class _ProfilepageState extends State<Profilepage> {
     try {
       final doc = await _firestore.collection('users').doc(user.uid).get();
       final data = doc.data() ?? {};
+      // Load watchlist subcollection
+      final wlSnap = await _firestore
+          .collection('users')
+          .doc(user.uid)
+          .collection('watchlist')
+          .get();
+      final wl = wlSnap.docs.map((d) => d.data()).toList();
+  
       setState(() {
         userEmail = user.email ?? '';
         userName = (data['fullName'] as String?) ?? user.email?.split('@').first ?? '';
         // Optional: balance
         final bal = data['balance'];
         if (bal is num) userBalance = '₹${bal.toStringAsFixed(2)}';
+        _watchlist = wl;
         _loading = false;
       });
     } catch (e) {

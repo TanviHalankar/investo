@@ -1,4 +1,3 @@
-
 import 'package:flutter/cupertino.dart';
 import 'dart:ui';
 import 'package:flutter/material.dart';
@@ -40,6 +39,13 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
   static const Color positiveGreen = Color(0xFF00E676);
   static const Color negativeRed = Color(0xFFFF5252);
 
+  // Null-safe: determine positivity from field or change prefix
+  bool _isPositive(Map<String, dynamic> stock) {
+    final v = stock['isPositive'];
+    if (v is bool) return v;
+    final change = stock['change']?.toString() ?? '';
+    return change.startsWith('+');
+  }
   // Chart time periods
   String selectedPeriod = '1D';
   List<String> periods = ['1D', '1W', '1M', '3M', '1Y', '5Y'];
@@ -134,9 +140,15 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
   // Generate sample chart data based on period
   List<FlSpot> _generateChartData() {
     final random = DateTime.now().millisecondsSinceEpoch;
-    final basePrice = double.parse(_currentStock['price']?.replaceAll(',', '') ?? widget.stock['price'].replaceAll(',', ''));
-    final isPositive = _currentStock['isPositive'] ?? widget.stock['isPositive'] as bool;
-
+    final basePrice = double.parse(
+      _currentStock['price']?.replaceAll(',', '') ??
+      widget.stock['price'].replaceAll(',', '')
+    );
+  
+    // Use null-safe positivity
+    final source = _currentStock.isEmpty ? widget.stock : _currentStock;
+    final isPositive = _isPositive(source);
+  
     int dataPoints;
     switch (selectedPeriod) {
       case '1D':
@@ -391,45 +403,45 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                   ),
                   SizedBox(height: 24),
 
-                        // Place Order Button
-                        Container(
-                          width: double.infinity,
-                          height: 56,
-                          decoration: BoxDecoration(
-                            color: actionColor,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: [
-                              BoxShadow(
-                                color: actionColor.withOpacity(0.3),
-                                blurRadius: 12,
-                                offset: Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: ElevatedButton(
-                            onPressed: () {
-                              Navigator.pop(context);
-                              _showOrderConfirmation(action, quantity, price, totalAmount);
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.transparent,
-                              foregroundColor: Colors.white,
-                              elevation: 0,
-                              shadowColor: Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                            ),
-                            child: Text(
-                              'Place $action Order',
-                              style: TextStyle(
-                                fontSize: 17,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ),
+                  // Place Order Button
+                  Container(
+                    width: double.infinity,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      color: actionColor,
+                      borderRadius: BorderRadius.circular(16),
+                      boxShadow: [
+                        BoxShadow(
+                          color: actionColor.withOpacity(0.3),
+                          blurRadius: 12,
+                          offset: Offset(0, 4),
                         ),
+                      ],
+                    ),
+                    child: ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        _showOrderConfirmation(action, quantity, price, totalAmount);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.transparent,
+                        foregroundColor: Colors.white,
+                        elevation: 0,
+                        shadowColor: Colors.transparent,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      child: Text(
+                        'Place $action Order',
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -637,7 +649,7 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                                   Container(
                                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                                     decoration: BoxDecoration(
-                                      color: widget.stock['isPositive']
+                                      color: _isPositive(widget.stock)
                                           ? positiveGreen.withOpacity(0.15)
                                           : negativeRed.withOpacity(0.15),
                                       borderRadius: BorderRadius.circular(12),
@@ -645,7 +657,7 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                                     child: Text(
                                       widget.stock['change'],
                                       style: TextStyle(
-                                        color: widget.stock['isPositive'] ? positiveGreen : negativeRed,
+                                        color: _isPositive(widget.stock) ? positiveGreen : negativeRed,
                                         fontSize: 17,
                                         fontWeight: FontWeight.w700,
                                       ),
@@ -746,7 +758,7 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                                 LineChartBarData(
                                   spots: chartData,
                                   isCurved: true,
-                                  color: widget.stock['isPositive'] ? positiveGreen : negativeRed,
+                                  color: _isPositive(widget.stock) ? positiveGreen : negativeRed,
                                   barWidth: 3,
                                   isStrokeCapRound: true,
                                   dotData: FlDotData(show: false),
@@ -756,10 +768,8 @@ class _EnhancedStockDetailsSheetState extends State<EnhancedStockDetailsSheet> {
                                       begin: Alignment.topCenter,
                                       end: Alignment.bottomCenter,
                                       colors: [
-                                        (widget.stock['isPositive'] ? positiveGreen : negativeRed)
-                                            .withOpacity(0.3),
-                                        (widget.stock['isPositive'] ? positiveGreen : negativeRed)
-                                            .withOpacity(0.0),
+                                        (_isPositive(widget.stock) ? positiveGreen : negativeRed).withOpacity(0.3),
+                                        (_isPositive(widget.stock) ? positiveGreen : negativeRed).withOpacity(0.0),
                                       ],
                                     ),
                                   ),

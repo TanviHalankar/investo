@@ -769,12 +769,7 @@ class _SettingsPageState extends State<SettingsPage> {
           TextButton(
             onPressed: () async {
               Navigator.pop(context);
-              
-              // Clear user data from SharedPreferences
-              final userDataService = UserDataService.instance;
-              await userDataService.logout();
-              
-              // Sign out from Firebase
+              await UserDataService.instance.logout();
               await FirebaseAuth.instance.signOut();
               
               if (mounted) {

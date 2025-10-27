@@ -178,6 +178,8 @@ class PortfolioService {
         // ignore parse errors, keep defaults
       }
     }
+    // Load and override from Firestore if available
+    await _loadFromRemote();
     _controller.add(_state);
   }
 
@@ -405,6 +407,48 @@ class PortfolioService {
       await batch.commit();
     } catch (_) {
       // Ignore remote sync errors (e.g., insufficient permissions)
+    }
+  }
+
+  Future<void> _loadFromRemote() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+    
+      final snapshot = await userDoc.get();
+      if (!snapshot.exists) return;
+      final data = snapshot.data() ?? {};
+    
+      final cashBalance = (data['cashBalance'] as num?)?.toDouble();
+      final points = (data['points'] as num?)?.toInt();
+    
+      final holdingsCol = userDoc.collection('holdings');
+      final holdingsSnap = await holdingsCol.get();
+      final holdings = <String, Holding>{};
+      for (final doc in holdingsSnap.docs) {
+        final h = Holding.fromJson(doc.data());
+        holdings[h.symbol] = h;
+      }
+    
+      // Note: transactions can be large; load recent N if needed
+      final txCol = userDoc.collection('transactions');
+      final txSnap = await txCol
+          .orderBy('timestamp', descending: true)
+          .limit(50)
+          .get();
+      final transactions = txSnap.docs
+          .map((d) => TransactionItem.fromJson(d.data()))
+          .toList();
+    
+      _state = _state.copyWith(
+        cashBalance: cashBalance ?? _state.cashBalance,
+        holdings: holdings.isNotEmpty ? holdings : _state.holdings,
+        transactions: transactions.isNotEmpty ? transactions : _state.transactions,
+        points: points ?? _state.points,
+      );
+    } catch (_) {
+      // swallow remote load errors, keep local state
     }
   }
 }

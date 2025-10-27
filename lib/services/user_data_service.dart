@@ -2,6 +2,9 @@ import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/user_model.dart';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 class UserDataService {
   static const String _currentUserKey = 'current_user';
   static const String _userDataPrefix = 'user_data_';
@@ -31,25 +34,51 @@ class UserDataService {
   // Save user data (user-specific storage)
   Future<bool> saveUserData(UserModel user) async {
     if (_prefs == null) await init();
-    
     try {
+      // Sanitize maps before encoding to JSON (avoid Timestamp/DateTime in local cache)
+      final userMap = user.toJson();
+      userMap['preferences'] = _sanitizeMap(user.preferences);
+      userMap['portfolio'] = _sanitizeMap(user.portfolio);
+      userMap['settings'] = _sanitizeMap(user.settings);
+
       // Save user data with user-specific key
       final userDataKey = '$_userDataPrefix${user.userId}';
-      final userDataJson = jsonEncode(user.toJson());
-      
+      final userDataJson = jsonEncode(userMap);
+
       // Save current user data
-      final currentUserJson = jsonEncode(user.toJson());
-      
+      final currentUserJson = jsonEncode(userMap);
+
       // Save all data atomically
       final success = await _prefs!.setString(userDataKey, userDataJson) &&
                      await _prefs!.setString(_currentUserKey, currentUserJson) &&
                      await _prefs!.setBool(_isLoggedInKey, true) &&
                      await _prefs!.setString(_lastActiveUserKey, user.userId);
-      
+
       if (success) {
         _currentUser = user;
+
+        // Firestore sync should not fail the local save
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? user.userId;
+        if (uid.isNotEmpty) {
+          try {
+            await FirebaseFirestore.instance
+                .collection('users')
+                .doc(uid)
+                .set({
+                  'email': user.email,
+                  'username': user.username,
+                  'displayName': user.displayName,
+                  'photoUrl': user.photoUrl,
+                  'lastLogin': user.lastLogin.toUtc(),
+                  'preferences': user.preferences,
+                  'portfolio': user.portfolio,
+                  'settings': user.settings,
+                }, SetOptions(merge: true));
+          } catch (e) {
+            print('Error syncing user data to Firestore: $e');
+          }
+        }
       }
-      
       return success;
     } catch (e) {
       print('Error saving user data: $e');
@@ -276,17 +305,58 @@ class UserDataService {
     print('Updated watchlist: $watchlist');
     final success = await setUserSpecificData('watchlist', watchlist, category: 'portfolio');
     print('Watchlist save result: $success');
-    return success;
+    if (!success) return false;
+
+    // Also persist in Firestore subcollection
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('watchlist')
+            .doc(stock['symbol'])
+            .set({
+              'symbol': stock['symbol'],
+              'name': stock['name'],
+              'price': stock['price'],
+              'change': stock['change'],
+              'addedAt': FieldValue.serverTimestamp(),
+            }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error adding watchlist item to Firestore: $e');
+    }
+
+    return true;
   }
 
   // Remove stock from watchlist
   Future<bool> removeFromWatchlist(String symbol) async {
     if (_currentUser == null) return false;
-    
     final watchlist = Map<String, dynamic>.from(_currentUser!.portfolio['watchlist'] ?? {});
     watchlist.remove(symbol);
-    
-    return await setUserSpecificData('watchlist', watchlist, category: 'portfolio');
+    final updatedUser = _currentUser!.copyWith(
+      portfolio: {..._currentUser!.portfolio, 'watchlist': watchlist},
+    );
+    final ok = await saveUserData(updatedUser);
+    if (!ok) return false;
+
+    // Also remove from Firestore subcollection
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('watchlist')
+            .doc(symbol)
+            .delete();
+      }
+    } catch (e) {
+      print('Error removing watchlist item from Firestore: $e');
+    }
+    return true;
   }
 
   // Get watchlist
@@ -357,9 +427,150 @@ class UserDataService {
       'totalInvested': newTotalInvested,
     });
     
-    return success;
-  }
+    if (!success) return false;
 
+    // Sync to Firestore: user doc, holdings subcollection, transaction
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+    
+        // Update minimal portfolio fields in user doc
+        await userDoc.set({
+          // Keep existing portfolio map updates
+          'portfolio': {
+            'virtualMoney': newMoney,
+            'totalInvested': newTotalInvested,
+            'holdings': holdings,
+          },
+          // Add top-level cashBalance so PortfolioService can load it later
+          'cashBalance': newMoney,
+          'updatedAt': DateTime.now().toUtc(),
+        }, SetOptions(merge: true));
+    
+        // Upsert holdings subcollection entry
+        final updated = holdings[symbol] as Map<String, dynamic>;
+        final q = (updated['quantity'] as num).toInt();
+        final avg = (updated['avgPrice'] as num).toDouble();
+        await userDoc.collection('holdings').doc(symbol).set({
+          'symbol': symbol,
+          'name': name,
+          'quantity': q,
+          'avgPrice': avg,
+          'lastPrice': price,
+          'marketValue': q * price,
+          'invested': q * avg,
+          'pnl': (q * price) - (q * avg),
+          'pnlPercent': avg == 0 ? 0 : (((price - avg) / avg) * 100),
+          'updatedAt': DateTime.now().toUtc(),
+        }, SetOptions(merge: true));
+    
+        // Append transaction
+        final txId = DateTime.now().millisecondsSinceEpoch.toString();
+        await userDoc.collection('transactions').doc(txId).set({
+          'id': txId,
+          'timestamp': DateTime.now().toIso8601String(),
+          'action': 'BUY',
+          'symbol': symbol,
+          'name': name,
+          'quantity': quantity,
+          'price': price,
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error syncing BUY to Firestore: $e');
+    }
+
+    return true;
+  }
+  Future<void> loadFromRemote() async {
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!doc.exists) return;
+
+      final data = doc.data() ?? {};
+      final email = (data['email'] as String?) ??
+          FirebaseAuth.instance.currentUser?.email ??
+          '';
+      final username = (data['username'] as String?) ??
+          (email.isNotEmpty ? email.split('@').first : '');
+
+      final displayName = data['displayName'] as String?;
+      final photoUrl = data['photoUrl'] as String?;
+
+      final lastLoginRaw = data['lastLogin'];
+      DateTime lastLogin;
+      if (lastLoginRaw is Timestamp) {
+        lastLogin = lastLoginRaw.toDate();
+      } else if (lastLoginRaw is int) {
+        lastLogin = DateTime.fromMillisecondsSinceEpoch(lastLoginRaw);
+      } else if (lastLoginRaw is String) {
+        lastLogin = DateTime.tryParse(lastLoginRaw) ?? DateTime.now();
+      } else {
+        lastLogin = DateTime.now();
+      }
+
+      final preferences = Map<String, dynamic>.from(data['preferences'] ?? {});
+      final portfolio = Map<String, dynamic>.from(data['portfolio'] ?? {});
+      final settings = Map<String, dynamic>.from(data['settings'] ?? {});
+
+      // Merge and sanitize watchlist subcollection
+      try {
+        final wlSnap = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('watchlist')
+            .get();
+        if (wlSnap.docs.isNotEmpty) {
+          final wl = <String, dynamic>{};
+          for (final d in wlSnap.docs) {
+            final s = Map<String, dynamic>.from(d.data());
+            final addedAt = s['addedAt'];
+            if (addedAt is Timestamp) {
+              s['addedAt'] = addedAt.millisecondsSinceEpoch;
+            } else if (addedAt is DateTime) {
+              s['addedAt'] = addedAt.millisecondsSinceEpoch;
+            }
+            // price normalization to number if possible
+            final price = s['price'];
+            if (price is String) {
+              s['price'] = double.tryParse(price.replaceAll(',', '')) ?? price;
+            }
+            // ensure change is a string for UI
+            if (s['change'] != null) {
+              s['change'] = s['change'].toString();
+            }
+            wl[d.id] = s;
+          }
+          portfolio['watchlist'] = wl;
+        }
+      } catch (_) {
+        // ignore watchlist load errors
+      }
+
+      final user = UserModel(
+        userId: uid,
+        email: email,
+        username: username.isNotEmpty ? username : 'User',
+        displayName: displayName,
+        photoUrl: photoUrl,
+        lastLogin: lastLogin,
+        preferences: preferences,
+        portfolio: portfolio,
+        settings: settings,
+      );
+
+      await saveUserData(user);
+    } catch (e) {
+      print('Error loading user data from Firestore: $e');
+    }
+  }
   // Sell stock (add money and remove/update holdings)
   Future<bool> sellStock(String symbol, double price, int quantity) async {
     if (_currentUser == null) return false;
@@ -405,7 +616,63 @@ class UserDataService {
       'totalInvested': newTotalInvested,
     });
     
-    return success;
+    if (!success) return false;
+
+    // Sync to Firestore: user doc, holdings subcollection (delete or update), transaction
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        // Update minimal portfolio fields in user doc
+        await userDoc.set({
+          'portfolio': {
+            'virtualMoney': newMoney,
+            'totalInvested': newTotalInvested,
+            'holdings': holdings,
+          },
+          'updatedAt': DateTime.now().toUtc(),
+        }, SetOptions(merge: true));
+
+        final holdingsCol = userDoc.collection('holdings');
+        if (!holdings.containsKey(symbol)) {
+          // Remove holding doc if quantity becomes 0
+          await holdingsCol.doc(symbol).delete();
+        } else {
+          final updated = holdings[symbol] as Map<String, dynamic>;
+          final q = (updated['quantity'] as num).toInt();
+          final avg = (updated['avgPrice'] as num).toDouble();
+          await holdingsCol.doc(symbol).set({
+            'symbol': symbol,
+            'name': currentHolding['name'] ?? symbol,
+            'quantity': q,
+            'avgPrice': avg,
+            'lastPrice': price,
+            'marketValue': q * price,
+            'invested': q * avg,
+            'pnl': (q * price) - (q * avg),
+            'pnlPercent': avg == 0 ? 0 : (((price - avg) / avg) * 100),
+            'updatedAt': DateTime.now().toUtc(),
+          }, SetOptions(merge: true));
+        }
+
+        // Append transaction
+        final txId = DateTime.now().millisecondsSinceEpoch.toString();
+        await userDoc.collection('transactions').doc(txId).set({
+          'id': txId,
+          'timestamp': DateTime.now().toIso8601String(),
+          'action': 'SELL',
+          'symbol': symbol,
+          'name': currentHolding['name'] ?? symbol,
+          'quantity': quantity,
+          'price': price,
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error syncing SELL to Firestore: $e');
+    }
+
+    return true;
   }
 
   // Get portfolio holdings
@@ -463,3 +730,34 @@ class UserDataService {
     };
   }
 }
+
+// Sanitization helpers for local storage JSON
+Map<String, dynamic> _sanitizeMap(Map<String, dynamic> input) {
+  final out = <String, dynamic>{};
+  input.forEach((key, value) {
+    out[key] = _sanitizeValue(value);
+  });
+  return out;
+}
+
+dynamic _sanitizeValue(dynamic value) {
+  if (value == null) return null;
+  if (value is Timestamp) return value.millisecondsSinceEpoch;
+  if (value is DateTime) return value.millisecondsSinceEpoch;
+  if (value is num || value is String || value is bool) return value;
+  if (value is Map) {
+    final m = <String, dynamic>{};
+    value.forEach((k, v) {
+      m[k.toString()] = _sanitizeValue(v);
+    });
+    return m;
+  }
+  if (value is List) {
+    return value.map(_sanitizeValue).toList();
+  }
+  // Fallback to string representation for unknown types
+  return value.toString();
+}
+
+
+

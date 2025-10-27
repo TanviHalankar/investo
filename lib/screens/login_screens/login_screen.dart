@@ -7,6 +7,7 @@ import '../../widgets/custom_text_field.dart';
 import 'register_screen.dart';
 import '../../services/user_data_service.dart';
 import '../../model/user_model.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -73,50 +74,36 @@ class _LoginScreenState extends State<LoginScreen>
         final user = userCredential.user!;
         final username = user.email!.split('@')[0];
         
-        // Create user model with current data
-        final userModel = UserModel(
-          userId: user.uid,
-          email: user.email!,
-          username: username,
-          displayName: user.displayName,
-          photoUrl: user.photoURL,
-          lastLogin: DateTime.now(),
-          preferences: {
-            'theme': 'dark',
-            'notifications': true,
-            'language': 'en',
-          },
-          portfolio: {
-            'virtualMoney': 10000.0,
-            'totalInvested': 0.0,
-            'totalReturns': 0.0,
-            'holdings': <String, dynamic>{},
-            'watchlist': <String, dynamic>{},
-          },
-          settings: {
-            'riskLevel': 'medium',
-            'autoTrade': false,
-            'soundEnabled': true,
-          },
-        );
-        
-        // Save user data to SharedPreferences
-        final userDataService = UserDataService.instance;
-        await userDataService.init();
-        final success = await userDataService.saveUserData(userModel);
-        
-        if (success) {
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (context) => HomeScreen(
-                username: username,
-              ),
-            ),
-          );
+        // Ensure Firestore has a baseline user doc
+        final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
+        final snap = await usersRef.get();
+        if (!snap.exists) {
+          await usersRef.set({
+            'email': user.email,
+            'username': username,
+            'createdAt': FieldValue.serverTimestamp(),
+            'lastLogin': FieldValue.serverTimestamp(),
+            'portfolio': {
+              'virtualMoney': 10000.0,
+              'totalInvested': 0.0,
+              'totalReturns': 0.0,
+              'holdings': <String, dynamic>{},
+              'watchlist': <String, dynamic>{},
+            },
+          }, SetOptions(merge: true));
         } else {
-          _showErrorSnackBar('Failed to save user data. Please try again.');
+          await usersRef.set({'lastLogin': FieldValue.serverTimestamp()}, SetOptions(merge: true));
         }
+    
+        // Hydrate local cache from Firestore (preserves money/watchlist)
+        await UserDataService.instance.loadFromRemote();
+    
+        // Navigate via named route to keep consistency with AuthGate
+        Navigator.pushReplacementNamed(
+          context,
+          '/home',
+          arguments: username,
+        );
       }
     } catch (e) {
       _showErrorSnackBar('Login failed: $e');
