@@ -1,6 +1,8 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:investo/screens/home_page/prediction_screen.dart';
+
 
 class LearningScreen extends StatefulWidget {
   final String username;
@@ -62,7 +64,7 @@ class _LearningScreenState extends State<LearningScreen>
       icon: Icons.security_outlined,
       color: negativeRed,
       completedLessons: 0,
-      totalLessons: 4,
+      totalLessons: 0,
       description: 'Protect your capital',
     ),
   ];
@@ -199,44 +201,7 @@ class _LearningScreenState extends State<LearningScreen>
     ),
   ];
 
-  final List<Lesson> riskManagementLessons = [
-    Lesson(
-      title: 'Understanding Risk Types',
-      description: 'Market, credit, liquidity, and operational risks',
-      duration: '10 min',
-      difficulty: 'Intermediate',
-      isCompleted: false,
-      progress: 0.0,
-      icon: Icons.warning,
-    ),
-    Lesson(
-      title: 'Position Sizing',
-      description: 'How much to invest in each position',
-      duration: '8 min',
-      difficulty: 'Intermediate',
-      isCompleted: false,
-      progress: 0.0,
-      icon: Icons.balance,
-    ),
-    Lesson(
-      title: 'Stop Loss Orders',
-      description: 'Protecting your investments from big losses',
-      duration: '7 min',
-      difficulty: 'Beginner',
-      isCompleted: false,
-      progress: 0.0,
-      icon: Icons.block,
-    ),
-    Lesson(
-      title: 'Portfolio Diversification',
-      description: 'Spreading risk across different assets',
-      duration: '12 min',
-      difficulty: 'Intermediate',
-      isCompleted: false,
-      progress: 0.0,
-      icon: Icons.account_balance_wallet,
-    ),
-  ];
+  final List<Lesson> riskManagementLessons = [];
 
   List<Lesson> getLessonsForCategory(int categoryIndex) {
     switch (categoryIndex) {
@@ -558,9 +523,19 @@ class _LearningScreenState extends State<LearningScreen>
 
             return GestureDetector(
               onTap: () {
-                setState(() {
-                  selectedCategoryIndex = index;
-                });
+              // Redirect to PredictionScreen when Risk Mgmt tab is tapped
+              if (category.title == 'Risk Mgmt' || index == 2) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => PredictionScreen(username: widget.username),
+                  ),
+                );
+                return; // do not switch tab selection
+              }
+              setState(() {
+                selectedCategoryIndex = index;
+              });
               },
               child: Container(
                 margin: const EdgeInsets.only(right: 12),
@@ -641,7 +616,16 @@ class _LearningScreenState extends State<LearningScreen>
   Widget _buildLessonCard(Lesson lesson) {
     return GestureDetector(
       onTap: () {
-        _showLessonDialog(lesson);
+        if (lesson.title == 'Trade Risk Simulator') {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PredictionScreen(username: widget.username),
+            ),
+          );
+        } else {
+          _showLessonDialog(lesson);
+        }
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 16),
