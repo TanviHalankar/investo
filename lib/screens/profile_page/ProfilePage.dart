@@ -11,6 +11,7 @@ import 'AnalyticsPage.dart';
 import 'CustomerSupportPage.dart';
 import 'OrdersPage.dart';
 import 'SettingsPage.dart';
+import '../achievements_screen.dart';
 
 class Profilepage extends StatefulWidget {
   const Profilepage({super.key});
@@ -302,6 +303,13 @@ class _ProfilepageState extends State<Profilepage> {
   Widget _buildMenuList() {
     return Column(
       children: [
+        _buildMenuItem(
+          icon: Icons.emoji_events,
+          title: "Achievements",
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const AchievementsScreen()));
+          },
+        ),
         _buildMenuItem(
           icon: Icons.receipt_long_outlined,
           title: "Orders",

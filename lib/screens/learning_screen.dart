@@ -8,6 +8,9 @@ import 'package:investo/screens/home_page/prediction_screen.dart';
 import '../services/user_data_service.dart';
 import '../news/eodhd_service.dart';
 import '../news/news_model.dart';
+import 'glossary_screen.dart';
+import 'quiz_screen.dart';
+import '../services/quiz_service.dart';
 
 
 class LearningScreen extends StatefulWidget {
@@ -35,6 +38,9 @@ class _LearningScreenState extends State<LearningScreen>
   
   // News service
   final EodhdService _newsService = EodhdService();
+  
+  // Quiz service
+  final QuizService _quizService = QuizService();
   final TextEditingController _newsSearchController = TextEditingController();
   List<NewsArticle> _newsArticles = [];
   bool _isLoadingNews = false;
@@ -587,37 +593,61 @@ class _LearningScreenState extends State<LearningScreen>
                 ),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [accentOrange, accentOrangeDim],
+            Row(
+              children: [
+                // Glossary Button
+                Container(
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: cardLight,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: borderColor, width: 1),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.menu_book, color: accentOrange, size: 20),
+                    tooltip: 'Stock Glossary',
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const GlossaryScreen()),
+                      );
+                    },
+                  ),
                 ),
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: accentOrange.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ],
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const Icon(Icons.local_fire_department, color: darkBg, size: 16),
-                  const SizedBox(width: 4),
-                  Text(
-                    '3 days',
-                    style: TextStyle(
-                      color: darkBg,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.2,
+                // Streak Badge
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [accentOrange, accentOrangeDim],
                     ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accentOrange.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
                   ),
-                ],
-              ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.local_fire_department, color: darkBg, size: 16),
+                      const SizedBox(width: 4),
+                      Text(
+                        '3 days',
+                        style: TextStyle(
+                          color: darkBg,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -1291,6 +1321,35 @@ class _LearningScreenState extends State<LearningScreen>
                       _buildLessonTag(lesson.duration, Icons.schedule),
                       const SizedBox(width: 8),
                       _buildLessonTag(lesson.difficulty, Icons.signal_cellular_alt),
+                      if (_quizService.hasQuizForLesson(lesson.title)) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: accentOrange.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: accentOrange.withOpacity(0.5),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.quiz, color: accentOrange, size: 12),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Quiz',
+                                style: TextStyle(
+                                  color: accentOrange,
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ],
@@ -1419,44 +1478,82 @@ class _LearningScreenState extends State<LearningScreen>
               ),
             ),
           ),
-          Container(
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [accentOrange, accentOrangeDim],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              boxShadow: [
-                BoxShadow(
-                  color: accentOrange.withOpacity(0.3),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
+          Row(
+            children: [
+              // Quiz Button (if available)
+              if (_quizService.hasQuizForLesson(lesson.title))
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => QuizScreen(
+                            lessonTitle: lesson.title,
+                            category: categoryName,
+                          ),
+                        ),
+                      );
+                    },
+                    icon: const Icon(Icons.quiz, size: 18),
+                    label: const Text('Take Quiz'),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: accentOrange,
+                      side: BorderSide(color: accentOrange),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                  ),
                 ),
-              ],
-            ),
-            child: ElevatedButton(
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.transparent,
-                foregroundColor: darkBg,
-                elevation: 0,
-                shadowColor: Colors.transparent,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+              if (_quizService.hasQuizForLesson(lesson.title))
+                const SizedBox(width: 12),
+              // Start Lesson Button
+              Expanded(
+                flex: _quizService.hasQuizForLesson(lesson.title) ? 1 : 2,
+                child: Container(
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [accentOrange, accentOrangeDim],
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: accentOrange.withOpacity(0.3),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.transparent,
+                      foregroundColor: darkBg,
+                      elevation: 0,
+                      shadowColor: Colors.transparent,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                      _showLessonContent(lesson);
+                    },
+                    child: const Text(
+                      'Start Lesson',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
                 ),
               ),
-              onPressed: () {
-                Navigator.pop(context);
-                _showLessonContent(lesson);
-              },
-              child: const Text(
-                'Start Lesson',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 15,
-                  letterSpacing: 0.5,
-                ),
-              ),
-            ),
+            ],
           ),
         ],
       ),
@@ -1593,6 +1690,56 @@ class _LearningScreenState extends State<LearningScreen>
                         'In this lesson, you learned about ${lesson.title.toLowerCase()} including key terminology, fundamental concepts, and practical applications. Continue practicing these concepts to build your confidence and expertise.',
                       ),
                       const SizedBox(height: 30),
+                      
+                      // Quiz Button (if available)
+                      if (_quizService.hasQuizForLesson(lesson.title)) ...[
+                        Container(
+                          width: double.infinity,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              colors: [accentOrange.withOpacity(0.2), accentOrangeDim.withOpacity(0.1)],
+                            ),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: accentOrange.withOpacity(0.5),
+                              width: 2,
+                            ),
+                          ),
+                          child: ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => QuizScreen(
+                                    lessonTitle: lesson.title,
+                                    category: getCategoryName(selectedCategoryIndex),
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(Icons.quiz, size: 20),
+                            label: const Text(
+                              'Test Your Knowledge - Take Quiz',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.transparent,
+                              foregroundColor: accentOrange,
+                              elevation: 0,
+                              padding: const EdgeInsets.symmetric(vertical: 16),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                      
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: lesson.isCompleted ? positiveGreen : accentOrange,

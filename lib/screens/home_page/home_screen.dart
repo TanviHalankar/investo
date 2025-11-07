@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:investo/chat_bot/chat_screen.dart';
 import 'package:investo/screens/learning_screen.dart';
 import 'package:investo/screens/portfolio_screen.dart';
@@ -11,6 +13,7 @@ import '../../services/real_time_service.dart';
 import '../../services/guide_service.dart';
 import '../../services/user_data_service.dart';
 import '../../services/portfolio_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../leader_board_screen.dart';
 import '../profile_page/ProfilePage.dart';
 import '../ipo_screen.dart';
@@ -43,6 +46,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   List<Map<String, dynamic>> _filteredStocks = [];
   final List<Map<String, dynamic>> _watchlistStocks = [];
   bool _isSearching = false;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _watchlistSubscription;
 
   // Real-time service
   final RealTimeService _realTimeService = RealTimeService();
@@ -137,6 +141,16 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     // Load user-specific data including persisted watchlist
     _loadUserData().then((_) {
       _initRealTimeData();
+    });
+
+    _subscribeToWatchlist();
+
+    // Refresh user data once remote sync completes
+    Future.microtask(() async {
+      await UserDataService.instance.loadFromRemote();
+      if (mounted) {
+        await _loadUserData();
+      }
     });
 
     // Ensure portfolio state is hydrated (local + Firestore override)
@@ -250,6 +264,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     
     // Update portfolio score if we have prices
     if (currentPrices.isNotEmpty) {
+      // Update PortfolioService with current prices (for accurate leaderboard ranking)
+      PortfolioService().updateWithCurrentPrices(currentPrices);
+      // Also update UserDataService for backward compatibility
       UserDataService.instance.updatePortfolioScore(currentPrices);
     }
   }
@@ -438,9 +455,30 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (userDataService.currentUser == null) {
       print('No current user in cache; hydrating from remote...');
       await userDataService.loadFromRemote();
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      if (userDataService.currentUser == null && firebaseUser != null) {
+        print('Hydration still null, creating local fallback user...');
+        await userDataService.ensureLocalUser(
+          userId: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          username: firebaseUser.email?.split('@').first ?? 'User',
+          displayName: firebaseUser.displayName,
+          photoUrl: firebaseUser.photoURL,
+        );
+      }
     }
 
-    // Normalize stock payload for persistence
+    if (userDataService.currentUser == null) {
+      GuideService().show(GuideStep(
+        id: 'watchlist_no_user',
+        title: 'Login issue 🦉',
+        message: 'We could not load your account details. Please try signing in again.',
+      ));
+      Future.delayed(const Duration(seconds: 3), () => GuideService().hide());
+      return;
+    }
+
+
     final normalized = {
       'symbol': stock['symbol']?.toString() ?? '',
       'name': stock['name']?.toString() ?? (stock['symbol']?.toString() ?? ''),
@@ -459,9 +497,19 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     if (success) {
       // Subscribe to real-time updates for this stock
       _realTimeService.subscribeToStock(normalized['symbol']);
+      await userDataService.loadFromRemote();
+      final refreshed = userDataService
+          .getWatchlist()
+          .map((s) {
+            final change = s['change']?.toString() ?? '';
+            return {...s, 'isPositive': change.startsWith('+')};
+          })
+          .toList();
       setState(() {
-        _watchlistStocks.add(normalized);
-        print('Added to local watchlist. Total items: ${_watchlistStocks.length}');
+        _watchlistStocks
+          ..clear()
+          ..addAll(refreshed);
+        print('Watchlist refreshed. Total items: ${_watchlistStocks.length}');
       });
 
       GuideService().show(GuideStep(
@@ -586,6 +634,7 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
   void dispose() {
     _searchController.dispose();
     _fadeController.dispose();
+    _watchlistSubscription?.cancel();
     super.dispose();
   }
 
@@ -603,6 +652,77 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
         onRemoveFromWatchlist: _removeFromWatchlist,
       ),
     );
+  }
+
+  void _subscribeToWatchlist() {
+    _watchlistSubscription?.cancel();
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+
+    final query = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('watchlist')
+        .orderBy('addedAt', descending: false);
+
+    _watchlistSubscription = query.snapshots().listen((snapshot) {
+      final items = snapshot.docs.map((doc) {
+        final data = doc.data();
+
+        final priceRaw = data['price'];
+        double? parsedPrice;
+        if (priceRaw is num) {
+          parsedPrice = priceRaw.toDouble();
+        } else if (priceRaw is String) {
+          parsedPrice = double.tryParse(priceRaw.replaceAll(',', ''));
+        }
+
+        final change = data['change']?.toString() ?? '';
+
+        final normalized = <String, dynamic>{
+          'symbol': data['symbol'] ?? doc.id,
+          'name': data['name'] ?? doc.id,
+          'price': parsedPrice ?? priceRaw ?? '',
+          'change': change,
+          'isPositive': change.startsWith('+'),
+        };
+
+        final addedAt = data['addedAt'];
+        if (addedAt is Timestamp) {
+          normalized['addedAt'] = addedAt.toDate().millisecondsSinceEpoch;
+        } else if (addedAt != null) {
+          normalized['addedAt'] = addedAt;
+        }
+
+        return normalized;
+      }).toList();
+
+      // Keep local cache aligned for other consumers.
+      final currentUser = UserDataService.instance.currentUser;
+      if (currentUser != null) {
+        final watchlistMap = {
+          for (final item in items)
+            item['symbol'] as String: Map<String, dynamic>.from(item)
+        };
+
+        final updated = currentUser.copyWith(
+          portfolio: {...currentUser.portfolio, 'watchlist': watchlistMap},
+        );
+        unawaited(UserDataService.instance
+            .saveUserData(updated, syncToFirestore: false));
+      }
+
+      if (mounted) {
+        setState(() {
+          _watchlistStocks
+            ..clear()
+            ..addAll(items);
+        });
+      }
+    }, onError: (error) {
+      debugPrint('Watchlist stream error: $error');
+    });
   }
 
   @override

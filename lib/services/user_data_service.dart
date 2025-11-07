@@ -1,6 +1,10 @@
+import 'dart:async';
 import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../model/user_model.dart';
+import 'portfolio_service.dart';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -32,7 +36,7 @@ class UserDataService {
   bool get isLoggedIn => _currentUser != null;
 
   // Save user data (user-specific storage)
-  Future<bool> saveUserData(UserModel user) async {
+  Future<bool> saveUserData(UserModel user, {bool syncToFirestore = true}) async {
     if (_prefs == null) await init();
     try {
       // Sanitize maps before encoding to JSON (avoid Timestamp/DateTime in local cache)
@@ -60,8 +64,13 @@ class UserDataService {
 
         // Firestore sync should not fail the local save
         final uid = FirebaseAuth.instance.currentUser?.uid ?? user.userId;
-        if (uid.isNotEmpty) {
+        if (syncToFirestore && uid.isNotEmpty) {
           try {
+            // Check if user document exists before syncing
+            final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+            final snapshot = await userDoc.get();
+            
+            // Only sync if document exists (don't recreate deleted user data)
             await FirebaseFirestore.instance
                 .collection('users')
                 .doc(uid)
@@ -305,27 +314,29 @@ class UserDataService {
     };
     
     print('Updated watchlist: $watchlist');
-    final success = await setUserSpecificData('watchlist', watchlist, category: 'portfolio');
+    final updatedUser = _currentUser!.copyWith(
+      portfolio: {..._currentUser!.portfolio, 'watchlist': watchlist},
+    );
+    final success = await saveUserData(updatedUser);
     print('Watchlist save result: $success');
     if (!success) return false;
 
     // Also persist in Firestore subcollection
     try {
-      final uid = FirebaseAuth.instance.currentUser?.uid;
-      if (uid != null) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('watchlist')
-            .doc(stock['symbol'])
-            .set({
-              'symbol': stock['symbol'],
-              'name': stock['name'],
-              'price': stock['price'],
-              'change': stock['change'],
-              'addedAt': FieldValue.serverTimestamp(),
-            }, SetOptions(merge: true));
-      }
+      final uid = FirebaseAuth.instance.currentUser?.uid ?? _currentUser!.userId;
+      await ensureRemoteUserDocument();
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('watchlist')
+          .doc(stock['symbol'])
+          .set({
+            'symbol': stock['symbol'],
+            'name': stock['name'],
+            'price': stock['price'],
+            'change': stock['change'],
+            'addedAt': FieldValue.serverTimestamp(),
+          }, SetOptions(merge: true));
     } catch (e) {
       print('Error adding watchlist item to Firestore: $e');
     }
@@ -379,6 +390,160 @@ class UserDataService {
     
     final watchlist = _currentUser!.portfolio['watchlist'] as Map<String, dynamic>? ?? {};
     return watchlist.containsKey(symbol);
+  }
+
+  // Ensure we have at least a minimal local user cached
+  Future<void> ensureLocalUser({
+    required String userId,
+    required String email,
+    required String username,
+    String? displayName,
+    String? photoUrl,
+  }) async {
+    if (_currentUser != null) {
+      if (_currentUser!.userId == userId) {
+        final updated = _currentUser!.copyWith(
+          email: email.isNotEmpty ? email : _currentUser!.email,
+          username: username.isNotEmpty ? username : _currentUser!.username,
+          displayName: displayName ?? _currentUser!.displayName,
+          photoUrl: photoUrl ?? _currentUser!.photoUrl,
+          lastLogin: DateTime.now(),
+        );
+        await saveUserData(updated, syncToFirestore: false);
+        return;
+      }
+    }
+
+    final normalizedUsername = username.isNotEmpty
+        ? username
+        : (email.contains('@') ? email.split('@').first : 'User');
+
+    final fallback = UserModel(
+      userId: userId,
+      email: email,
+      username: normalizedUsername,
+      displayName: displayName,
+      photoUrl: photoUrl,
+      lastLogin: DateTime.now(),
+      preferences: {},
+      settings: {},
+      lessons: {
+        'Basics': <String, dynamic>{},
+        'News': <String, dynamic>{},
+        'Risk Mgmt': <String, dynamic>{},
+      },
+      portfolio: {
+        'virtualMoney': 10000.0,
+        'initialMoney': 10000.0,
+        'totalMoneyAdded': 0.0,
+        'totalInvested': 0.0,
+        'totalReturns': 0.0,
+        'holdings': <String, dynamic>{},
+        'watchlist': <String, dynamic>{},
+      },
+    );
+
+    await saveUserData(fallback, syncToFirestore: false);
+    unawaited(ensureRemoteUserDocument(userOverride: fallback));
+  }
+
+  Future<void> ensureRemoteUserDocument({UserModel? userOverride}) async {
+    try {
+      final firebaseUser = FirebaseAuth.instance.currentUser;
+      final userModel = userOverride ?? _currentUser;
+      final uid = firebaseUser?.uid ?? userModel?.userId;
+      if (uid == null || uid.isEmpty) return;
+
+      final email = userModel?.email ?? firebaseUser?.email ?? '';
+      final username = userModel?.username ??
+          (email.contains('@') ? email.split('@').first : (firebaseUser?.displayName ?? uid));
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+      final snapshot = await userDoc.get();
+
+      final defaultPortfolio = {
+        'virtualMoney': 10000.0,
+        'initialMoney': 10000.0,
+        'totalMoneyAdded': 0.0,
+        'totalInvested': 0.0,
+        'totalReturns': 0.0,
+        'holdings': <String, dynamic>{},
+        'watchlist': <String, dynamic>{},
+      };
+
+      final defaultLessons = {
+        'Basics': <String, dynamic>{},
+        'News': <String, dynamic>{},
+        'Risk Mgmt': <String, dynamic>{},
+      };
+
+      if (!snapshot.exists) {
+        await userDoc.set({
+          'uid': uid,
+          'email': email,
+          'username': username,
+          'displayName': userModel?.displayName ?? firebaseUser?.displayName,
+          'photoUrl': userModel?.photoUrl ?? firebaseUser?.photoURL,
+          'createdAt': FieldValue.serverTimestamp(),
+          'lastLogin': FieldValue.serverTimestamp(),
+          'portfolio': (userModel?.portfolio.isNotEmpty ?? false)
+              ? userModel!.portfolio
+              : defaultPortfolio,
+          'lessons': (userModel?.lessons.isNotEmpty ?? false)
+              ? userModel!.lessons
+              : defaultLessons,
+          'achievements': [],
+          'points': 0,
+        }, SetOptions(merge: true));
+      } else {
+        await userDoc.set({
+          'email': email,
+          'username': username,
+          'displayName': userModel?.displayName ?? firebaseUser?.displayName,
+          'photoUrl': userModel?.photoUrl ?? firebaseUser?.photoURL,
+          'lastLogin': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e, stackTrace) {
+      if (kDebugMode) {
+        print('Error ensuring remote user document: $e');
+        print(stackTrace);
+      }
+    }
+  }
+
+  Future<void> runPostSignInWarmup({bool waitForCompletion = false}) async {
+    final firebaseUser = FirebaseAuth.instance.currentUser;
+    if (firebaseUser == null) return;
+
+    Future<void> safeRun(Future<void> future) async {
+      try {
+        await future;
+      } catch (e, stackTrace) {
+        if (kDebugMode) {
+          print('Post sign-in warmup error: $e');
+          print(stackTrace);
+        }
+      }
+    }
+
+    Future<void> ensureAndLoad() async {
+      await ensureRemoteUserDocument();
+      await loadFromRemote();
+    }
+
+    final tasks = <Future<void>>[
+      ensureAndLoad(),
+      initializeUserScore(),
+      PortfolioService().load(),
+    ];
+
+    if (waitForCompletion) {
+      await Future.wait(tasks.map(safeRun));
+    } else {
+      for (final task in tasks) {
+        unawaited(safeRun(task));
+      }
+    }
   }
 
   // PORTFOLIO MANAGEMENT
@@ -760,14 +925,12 @@ class UserDataService {
     final profitLoss = calculateProfitLoss(currentPrices);
     final returnPercent = calculateReturnPercentage(currentPrices);
     
-    // Calculate score: portfolio value + profit/loss bonus
-    // Higher portfolio value = higher score, profit adds bonus
-    final score = portfolioValue + (profitLoss * 0.1); // Profit adds 10% bonus to score
-    
     final success = await setUserSpecificData('portfolioValue', portfolioValue, category: 'portfolio');
     if (!success) return false;
     
     // Sync to Firestore for leaderboard - ensure username is also set
+    // Note: Points are managed by PortfolioService and synced separately
+    // We only update portfolioValue, profitLoss, returnPercent here
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid != null) {
@@ -777,7 +940,7 @@ class UserDataService {
           'portfolioValue': portfolioValue,
           'profitLoss': profitLoss,
           'returnPercent': returnPercent,
-          'points': score, // Use score for leaderboard ranking
+          // Don't overwrite points here - PortfolioService manages points (trading + achievements)
           'updatedAt': DateTime.now().toUtc(),
         }, SetOptions(merge: true));
       }
@@ -807,7 +970,7 @@ class UserDataService {
           'username': _currentUser!.username,
           'email': _currentUser!.email,
           'portfolioValue': initialMoney,
-          'points': initialMoney,
+          'points': 0, // Users start with 0 points, not 10,000 (points are earned through trading and achievements)
           'returnPercent': 0.0,
           'profitLoss': 0.0,
           'updatedAt': DateTime.now().toUtc(),

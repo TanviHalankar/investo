@@ -1,13 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:investo/screens/trade_prediction_screen.dart';
-import '../home_page/home_screen.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
 import 'register_screen.dart';
 import '../../services/user_data_service.dart';
 import '../../model/user_model.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -37,6 +37,7 @@ class _LoginScreenState extends State<LoginScreen>
   Animation<double>? _fadeAnimation;
   Animation<Offset>? _slideAnimation;
   Animation<double>? _scaleAnimation;
+  bool _isSigningIn = false;
 
   @override
   void initState() {
@@ -75,59 +76,51 @@ class _LoginScreenState extends State<LoginScreen>
   }
 
   void _login() async {
+    if (_isSigningIn) return;
+    setState(() {
+      _isSigningIn = true;
+    });
+
     try {
       final userCredential = await _auth.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
-      if (userCredential.user != null) {
-        final user = userCredential.user!;
-        final username = user.email!.split('@')[0];
+      final firebaseUser = userCredential.user;
+      if (firebaseUser != null) {
+        final fallbackUsername =
+            firebaseUser.email?.split('@').first ?? 'User';
 
-        // Ensure Firestore has a baseline user doc
-        final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
-        final snap = await usersRef.get();
-        if (!snap.exists) {
-          await usersRef.set({
-            'email': user.email,
-            'username': username,
-            'createdAt': FieldValue.serverTimestamp(),
-            'lastLogin': FieldValue.serverTimestamp(),
-            'portfolio': {
-              'virtualMoney': 10000.0,
-              'initialMoney': 10000.0,
-              'totalMoneyAdded': 0.0,
-              'totalInvested': 0.0,
-              'totalReturns': 0.0,
-              'holdings': <String, dynamic>{},
-              'watchlist': <String, dynamic>{},
-            },
-            'lessons': {
-              'Basics': <String, dynamic>{},
-              'News': <String, dynamic>{},
-              'Risk Mgmt': <String, dynamic>{},
-            },
-          }, SetOptions(merge: true));
-        } else {
-          await usersRef.set({'lastLogin': FieldValue.serverTimestamp()}, SetOptions(merge: true));
-        }
+        await UserDataService.instance.ensureLocalUser(
+          userId: firebaseUser.uid,
+          email: firebaseUser.email ?? '',
+          username: fallbackUsername,
+          displayName: firebaseUser.displayName,
+          photoUrl: firebaseUser.photoURL,
+        );
 
-        // Hydrate local cache from Firestore (preserves money/watchlist)
-        await UserDataService.instance.loadFromRemote();
-        
-        // Initialize user score in leaderboard
-        await UserDataService.instance.initializeUserScore();
+        await UserDataService.instance.runPostSignInWarmup(waitForCompletion: true);
 
-        // Navigate via named route to keep consistency with AuthGate
+        if (!mounted) return;
+
+        final resolvedUsername =
+            UserDataService.instance.currentUser?.username ?? fallbackUsername;
+
         Navigator.pushReplacementNamed(
           context,
           '/home',
-          arguments: username,
+          arguments: resolvedUsername,
         );
       }
     } catch (e) {
       _showErrorSnackBar('Login failed: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSigningIn = false;
+        });
+      }
     }
   }
 
@@ -213,6 +206,32 @@ class _LoginScreenState extends State<LoginScreen>
                 ),
               ),
             ),
+
+            if (_isSigningIn)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.55),
+                  child: const Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        CircularProgressIndicator(
+                          color: accentOrange,
+                        ),
+                        SizedBox(height: 16),
+                        Text(
+                          'Signing you in...',
+                          style: TextStyle(
+                            color: textSecondary,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
@@ -391,7 +410,7 @@ class _LoginScreenState extends State<LoginScreen>
             child: Material(
               color: Colors.transparent,
               child: InkWell(
-                onTap: _login,
+                onTap: _isSigningIn ? null : _login,
                 borderRadius: BorderRadius.circular(16),
                 child: const Center(
                   child: Text(

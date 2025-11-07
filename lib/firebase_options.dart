@@ -50,19 +50,20 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyBdqA46EczkArsABsQsKUgJX7ih1jUOcig',
-    appId: '1:672483643663:web:0b7ee838b8fb56842bee7a',
-    messagingSenderId: '672483643663',
-    projectId: 'investo-flutter',
-    authDomain: 'investo-flutter.firebaseapp.com',
-    storageBucket: 'investo-flutter.firebasestorage.app',
+    apiKey: 'AIzaSyAXxMcscChRoYquiZSE5jfZfB0Mf8TSni0',
+    appId: '1:42226692464:web:07dd4a205bc7afb4209fb5',
+    messagingSenderId: '42226692464',
+    projectId: 'investo-demo',
+    authDomain: 'investo-demo.firebaseapp.com',
+    storageBucket: 'investo-demo.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDPFc8A-Hsn3WpNfOczIJoZIT7Xh_lPK7o',
-    appId: '1:672483643663:android:cf1695f43959c7d52bee7a',
-    messagingSenderId: '672483643663',
-    projectId: 'investo-flutter',
-    storageBucket: 'investo-flutter.firebasestorage.app',
+    apiKey: 'AIzaSyAK7LU3ogg_TOmzyRa7gMT-fN5hy8BD6y0',
+    appId: '1:42226692464:android:1752154deac70e61209fb5',
+    messagingSenderId: '42226692464',
+    projectId: 'investo-demo',
+    storageBucket: 'investo-demo.firebasestorage.app',
   );
+
 }

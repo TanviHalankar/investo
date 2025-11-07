@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'achievement_service.dart';
 
 class Holding {
   final String symbol;
@@ -150,13 +151,14 @@ class PortfolioState {
 }
 
 class PortfolioService {
-  static const _storageKey = 'portfolio_state_v1';
+  static const String _storageKeyPrefix = 'portfolio_state_v1_';
+  String? _currentUserId; // Track current user to detect user switches
   static final PortfolioService _instance = PortfolioService._internal();
   factory PortfolioService() => _instance;
 
   final _controller = StreamController<PortfolioState>.broadcast();
   PortfolioState _state = const PortfolioState(
-    cashBalance: 100000.0, // starting demo money
+    cashBalance: 10000.0, // starting demo money
     holdings: {},
     transactions: [],
     points: 0,
@@ -167,9 +169,68 @@ class PortfolioService {
   Stream<PortfolioState> get stream => _controller.stream;
   PortfolioState get state => _state;
 
-  Future<void> load() async {
+  // Get user-specific storage key
+  String _getStorageKey(String? userId) {
+    if (userId == null || userId.isEmpty) {
+      return '${_storageKeyPrefix}anonymous';
+    }
+    return '$_storageKeyPrefix$userId';
+  }
+
+  Future<void> load({bool awaitRemote = false}) async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    
+    // If user has changed, reset state before loading
+    if (_currentUserId != null && _currentUserId != uid) {
+      _state = const PortfolioState(
+        cashBalance: 10000.0,
+        holdings: {},
+        transactions: [],
+        points: 0,
+      );
+    }
+    _currentUserId = uid;
+
+    if (uid != null) {
+      await _loadLocal(uid);
+    }
+
+    _controller.add(_state);
+
+    // Firestore load in background (optionally awaited)
+    if (uid == null) return;
+
+    Future<void> remoteFuture = _loadFromRemote().then((_) async {
+      final refreshedUid = FirebaseAuth.instance.currentUser?.uid;
+      if (refreshedUid != null) {
+        await _saveLocal(refreshedUid);
+        _controller.add(_state);
+      }
+    });
+
+    if (awaitRemote) {
+      await remoteFuture;
+    }
+  }
+
+  Future<void> loadAndAwaitRemote() => load(awaitRemote: true);
+
+  Future<void> _saveLocal(String uid) async {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_storageKey);
+    final storageKey = _getStorageKey(uid);
+    await prefs.setString(storageKey, jsonEncode(_state.toJson()));
+  }
+
+  Future<void> _clearLocal(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final storageKey = _getStorageKey(uid);
+    await prefs.remove(storageKey);
+  }
+
+  Future<void> _loadLocal(String uid) async {
+    final prefs = await SharedPreferences.getInstance();
+    final storageKey = _getStorageKey(uid);
+    final raw = prefs.getString(storageKey);
     if (raw != null) {
       try {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
@@ -178,14 +239,15 @@ class PortfolioService {
         // ignore parse errors, keep defaults
       }
     }
-    // Load and override from Firestore if available
-    await _loadFromRemote();
-    _controller.add(_state);
   }
 
   Future<void> _save() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return; // Don't save if no user logged in
+    
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_storageKey, jsonEncode(_state.toJson()));
+    final storageKey = _getStorageKey(uid);
+    await prefs.setString(storageKey, jsonEncode(_state.toJson()));
   }
 
   // Award simple points logic: 1 point per 100 invested, bonus for streak
@@ -250,6 +312,27 @@ class PortfolioService {
     _controller.add(_state);
     await _save();
     await _syncToRemote(addTransaction: tx);
+    
+    // Update achievement progress for trading achievements
+    try {
+      final achievementService = AchievementService();
+      // Get current progress
+      final progress = await achievementService.getUserProgress();
+      final currentFirstTrade = progress['first_trade'] ?? 0;
+      final currentTradeCount = progress['trader_10'] ?? 0;
+      
+      // Update first trade achievement (only if not already completed)
+      if (currentFirstTrade == 0) {
+        await achievementService.updateProgress('first_trade', 1);
+      }
+      
+      // Update trade count achievements (increment by 1)
+      final newTradeCount = currentTradeCount + 1;
+      await achievementService.updateProgress('trader_10', newTradeCount);
+      await achievementService.updateProgress('trader_50', newTradeCount);
+    } catch (e) {
+      // Ignore achievement update errors
+    }
   }
 
   Future<void> sell({
@@ -306,11 +389,32 @@ class PortfolioService {
     _controller.add(_state);
     await _save();
     await _syncToRemote(addTransaction: tx);
+    
+    // Update achievement progress for trading achievements
+    try {
+      final achievementService = AchievementService();
+      // Get current progress
+      final progress = await achievementService.getUserProgress();
+      final currentFirstTrade = progress['first_trade'] ?? 0;
+      final currentTradeCount = progress['trader_10'] ?? 0;
+      
+      // Update first trade achievement (only if not already completed)
+      if (currentFirstTrade == 0) {
+        await achievementService.updateProgress('first_trade', 1);
+      }
+      
+      // Update trade count achievements (increment by 1)
+      final newTradeCount = currentTradeCount + 1;
+      await achievementService.updateProgress('trader_10', newTradeCount);
+      await achievementService.updateProgress('trader_50', newTradeCount);
+    } catch (e) {
+      // Ignore achievement update errors
+    }
   }
 
   Future<void> reset() async {
     _state = const PortfolioState(
-      cashBalance: 100000.0,
+      cashBalance: 10000.0, // Aligned with starting amount
       holdings: {},
       transactions: [],
       points: 0,
@@ -348,20 +452,73 @@ class PortfolioService {
     await _syncToRemote();
   }
 
+  // Reset points to 0 (keeps trading history and portfolio)
+  Future<void> resetPoints() async {
+    _state = _state.copyWith(points: 0);
+    _controller.add(_state);
+    await _save();
+    await _syncToRemote();
+  }
+
+  // Update portfolio value with current market prices (for accurate leaderboard ranking)
+  // This should be called periodically when stock prices change
+  Future<void> updateWithCurrentPrices(Map<String, double> currentPrices) async {
+    if (currentPrices.isEmpty) return;
+    
+    // Update holdings with current market prices
+    final updatedHoldings = <String, Holding>{};
+    _state.holdings.forEach((symbol, holding) {
+      final currentPrice = currentPrices[symbol] ?? holding.lastPrice;
+      // Update lastPrice to current market price for accurate portfolio valuation
+      updatedHoldings[symbol] = holding.copyWith(lastPrice: currentPrice);
+    });
+    
+    // Update state with new holdings (this will recalculate marketValue and totalValue)
+    _state = _state.copyWith(holdings: updatedHoldings);
+    _controller.add(_state);
+    
+    // Sync to Firestore with updated portfolio value based on current prices
+    await _syncToRemote();
+  }
+
   // Firestore sync
   Future<void> _syncToRemote({TransactionItem? addTransaction}) async {
     try {
       final uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) return; // not logged in
+      
+      // Check if Firestore document exists - if not, don't sync (user data was deleted)
       final users = FirebaseFirestore.instance.collection('users');
       final userDoc = users.doc(uid);
-
+      final snapshot = await userDoc.get();
       final now = DateTime.now();
+      if (!snapshot.exists) {
+        final authUser = FirebaseAuth.instance.currentUser;
+        final email = authUser?.email;
+        await userDoc.set({
+          'uid': uid,
+          'email': email,
+          'username': (email != null && email.contains('@'))
+              ? email.split('@').first
+              : uid,
+          'createdAt': now.toUtc(),
+        }, SetOptions(merge: true));
+      }
+      final initialInvestment = 10000.0; // Starting money for all users
+      final portfolioValue = _state.totalValue;
+      final profitLoss = portfolioValue - initialInvestment;
+      final returnPercent = initialInvestment > 0 
+          ? (profitLoss / initialInvestment) * 100 
+          : 0.0;
+      
       final userData = {
         'cashBalance': _state.cashBalance,
         'invested': _state.invested,
         'marketValue': _state.marketValue,
-        'totalValue': _state.totalValue,
+        'totalValue': portfolioValue,
+        'portfolioValue': portfolioValue, // For leaderboard
+        'profitLoss': profitLoss, // For leaderboard
+        'returnPercent': returnPercent, // For leaderboard
         'points': _state.points,
         'email': FirebaseAuth.instance.currentUser?.email,
         'username': FirebaseAuth.instance.currentUser?.email?.split('@').first,
@@ -417,7 +574,18 @@ class PortfolioService {
       final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
     
       final snapshot = await userDoc.get();
-      if (!snapshot.exists) return;
+      if (!snapshot.exists) {
+        // Firestore document doesn't exist - clear local cache if it exists
+        await _clearLocal(uid);
+        // Reset to default state
+        _state = const PortfolioState(
+          cashBalance: 10000.0,
+          holdings: {},
+          transactions: [],
+          points: 0,
+        );
+        return;
+      }
       final data = snapshot.data() ?? {};
     
       final cashBalance = (data['cashBalance'] as num?)?.toDouble();
@@ -441,12 +609,20 @@ class PortfolioService {
           .map((d) => TransactionItem.fromJson(d.data()))
           .toList();
     
+      // Use default 10000 if cashBalance is not set in Firestore
+      final finalCashBalance = cashBalance ?? 10000.0;
+      
       _state = _state.copyWith(
-        cashBalance: cashBalance ?? _state.cashBalance,
+        cashBalance: finalCashBalance,
         holdings: holdings.isNotEmpty ? holdings : _state.holdings,
         transactions: transactions.isNotEmpty ? transactions : _state.transactions,
         points: points ?? _state.points,
       );
+      
+      // If this is a new user (no cashBalance in Firestore), initialize it
+      if (cashBalance == null) {
+        await _syncToRemote(); // Initialize Firestore with default values
+      }
     } catch (_) {
       // swallow remote load errors, keep local state
     }

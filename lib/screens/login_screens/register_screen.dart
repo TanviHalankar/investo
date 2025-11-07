@@ -1,9 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
-import '../home_page/home_screen.dart';
 import '../../widgets/custom_button.dart';
 import '../../widgets/custom_text_field.dart';
+import '../../services/user_data_service.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -17,7 +18,6 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _auth = FirebaseAuth.instance;
-  final _firestore = FirebaseFirestore.instance;
 
   // Modern dark color scheme with orange accents (matching home_screen.dart)
   static const Color darkBg = Color(0xFF0D0D0D);
@@ -78,18 +78,29 @@ class _RegisterScreenState extends State<RegisterScreen>
         password: _passwordController.text,
       );
       if (userCredential.user != null) {
-        await _firestore.collection('users').doc(userCredential.user!.uid).set({
-          'email': userCredential.user!.email,
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        final user = userCredential.user!;
+        final fallbackUsername =
+            user.email?.split('@').first ?? 'User';
 
-        Navigator.pushReplacement(
+        await UserDataService.instance.ensureLocalUser(
+          userId: user.uid,
+          email: user.email ?? '',
+          username: fallbackUsername,
+          displayName: user.displayName,
+          photoUrl: user.photoURL,
+        );
+
+        await UserDataService.instance.runPostSignInWarmup(waitForCompletion: true);
+
+        if (!mounted) return;
+
+        final resolvedUsername =
+            UserDataService.instance.currentUser?.username ?? fallbackUsername;
+
+        Navigator.pushReplacementNamed(
           context,
-          MaterialPageRoute(
-            builder: (context) => HomeScreen(
-              username: userCredential.user!.email!.split('@')[0],
-            ),
-          ),
+          '/home',
+          arguments: resolvedUsername,
         );
       }
     } catch (e) {
