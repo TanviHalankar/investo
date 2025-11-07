@@ -23,6 +23,19 @@ class _PredictionScreenState extends State<PredictionScreen>
   int _completedFields = 0;
   bool _showResult = false;
 
+  // Modern dark color scheme with orange accents (matching home_screen.dart)
+  static const Color darkBg = Color(0xFF0D0D0D);
+  static const Color cardDark = Color(0xFF1A1A1A);
+  static const Color cardLight = Color(0xFF242424);
+  static const Color accentOrange = Color(0xFFFF9500);
+  static const Color accentOrangeDim = Color(0xFFCC7700);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFF999999);
+  static const Color textTertiary = Color(0xFF666666);
+  static const Color borderColor = Color(0xFF2A2A2A);
+  static const Color positiveGreen = Color(0xFF00E676);
+  static const Color negativeRed = Color(0xFFFF5252);
+
   // Animation controllers
   late AnimationController _pulseController;
   late AnimationController _resultController;
@@ -136,22 +149,11 @@ class _PredictionScreenState extends State<PredictionScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: darkBg,
       body: Container(
         width: size.width,
         height: size.height,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0F0C29),
-              Color(0xFF24243e),
-              Color(0xFF302B63),
-              Color(0xFF0F0C29),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
+        color: darkBg,
         child: Stack(
           children: [
             // Animated floating elements
@@ -220,7 +222,7 @@ class _PredictionScreenState extends State<PredictionScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    const Color(0xFF00F5FF).withOpacity(0.1),
+                    accentOrange.withOpacity(0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -237,14 +239,11 @@ class _PredictionScreenState extends State<PredictionScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.15),
-            Colors.white.withOpacity(0.05),
-          ],
+        gradient: const LinearGradient(
+          colors: [cardDark, cardLight],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: borderColor),
       ),
       child: Row(
         children: [
@@ -253,18 +252,18 @@ class _PredictionScreenState extends State<PredictionScreen>
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [accentOrange, accentOrangeDim],
               ),
               borderRadius: BorderRadius.circular(15),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00F5FF).withOpacity(0.4),
+                  color: accentOrange.withOpacity(0.4),
                   blurRadius: 10,
                   spreadRadius: 1,
                 ),
               ],
             ),
-            child: const Icon(Icons.person, color: Colors.white, size: 24),
+            child: const Icon(Icons.person, color: darkBg, size: 24),
           ),
           const SizedBox(width: 16),
 
@@ -276,16 +275,16 @@ class _PredictionScreenState extends State<PredictionScreen>
                 Text(
                   'Welcome back,',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: textSecondary,
                     fontSize: 14,
                   ),
                 ),
                 Text(
                   widget.username,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: textPrimary,
                     fontSize: 20,
-                    fontWeight: FontWeight.bold,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
               ],
@@ -296,23 +295,23 @@ class _PredictionScreenState extends State<PredictionScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
-              color: const Color(0xFF00F5FF).withOpacity(0.2),
+              color: accentOrange.withOpacity(0.2),
               borderRadius: BorderRadius.circular(15),
-              border: Border.all(color: const Color(0xFF00F5FF).withOpacity(0.5)),
+              border: Border.all(color: accentOrange.withOpacity(0.5)),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
                 const Icon(
                   Icons.stars,
-                  color: Color(0xFF00F5FF),
+                  color: accentOrange,
                   size: 16,
                 ),
                 const SizedBox(width: 4),
                 Text(
                   'Level ${_completedFields + 1}',
                   style: const TextStyle(
-                    color: Color(0xFF00F5FF),
+                    color: accentOrange,
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
                   ),
@@ -329,14 +328,11 @@ class _PredictionScreenState extends State<PredictionScreen>
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            Colors.white.withOpacity(0.15),
-            Colors.white.withOpacity(0.05),
-          ],
+        gradient: const LinearGradient(
+          colors: [cardDark, cardLight],
         ),
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         children: [
@@ -346,7 +342,7 @@ class _PredictionScreenState extends State<PredictionScreen>
               Text(
                 'Quest Progress',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: textPrimary,
                   fontSize: 16,
                   fontWeight: FontWeight.w600,
                 ),
@@ -354,7 +350,7 @@ class _PredictionScreenState extends State<PredictionScreen>
               Text(
                 '$_completedFields/4 fields',
                 style: TextStyle(
-                  color: const Color(0xFF00F5FF),
+                  color: accentOrange,
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
                 ),
@@ -367,7 +363,7 @@ class _PredictionScreenState extends State<PredictionScreen>
           Container(
             height: 8,
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.1),
+              color: cardLight,
               borderRadius: BorderRadius.circular(4),
             ),
             child: LayoutBuilder(
@@ -381,12 +377,12 @@ class _PredictionScreenState extends State<PredictionScreen>
                       height: 8,
                       decoration: BoxDecoration(
                         gradient: const LinearGradient(
-                          colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                          colors: [accentOrange, accentOrangeDim],
                         ),
                         borderRadius: BorderRadius.circular(4),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(0xFF00F5FF).withOpacity(0.4),
+                            color: accentOrange.withOpacity(0.4),
                             blurRadius: 6,
                           ),
                         ],
@@ -409,18 +405,18 @@ class _PredictionScreenState extends State<PredictionScreen>
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
                   color: isCompleted
-                      ? const Color(0xFF00F5FF).withOpacity(0.2)
-                      : Colors.white.withOpacity(0.05),
+                      ? accentOrange.withOpacity(0.2)
+                      : cardLight,
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(
                     color: isCompleted
-                        ? const Color(0xFF00F5FF)
-                        : Colors.white.withOpacity(0.2),
+                        ? accentOrange
+                        : borderColor,
                   ),
                 ),
                 child: Icon(
                   isCompleted ? Icons.check_circle : Icons.radio_button_unchecked,
-                  color: isCompleted ? const Color(0xFF00F5FF) : Colors.white.withOpacity(0.4),
+                  color: isCompleted ? accentOrange : textTertiary,
                   size: 20,
                 ),
               );
@@ -437,21 +433,11 @@ class _PredictionScreenState extends State<PredictionScreen>
       child: Container(
         padding: const EdgeInsets.all(24),
         decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              Colors.white.withOpacity(0.15),
-              Colors.white.withOpacity(0.05),
-            ],
+          gradient: const LinearGradient(
+            colors: [cardDark, cardLight],
           ),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withOpacity(0.2)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.1),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
+          border: Border.all(color: borderColor),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -459,9 +445,9 @@ class _PredictionScreenState extends State<PredictionScreen>
             Text(
               '⚡ Trading Parameters',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.9),
+                color: textPrimary,
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w700,
               ),
             ),
             const SizedBox(height: 20),
@@ -511,22 +497,22 @@ class _PredictionScreenState extends State<PredictionScreen>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.08),
+        color: cardDark,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.2)),
+        border: Border.all(color: borderColor),
       ),
       child: TextFormField(
         controller: controller,
         keyboardType: TextInputType.number,
         style: const TextStyle(
-          color: Colors.white,
+          color: textPrimary,
           fontSize: 16,
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.6),
+            color: textSecondary,
             fontSize: 14,
           ),
           prefixIcon: Container(
@@ -534,16 +520,16 @@ class _PredictionScreenState extends State<PredictionScreen>
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [accentOrange, accentOrangeDim],
               ),
               borderRadius: BorderRadius.circular(8),
             ),
-            child: Icon(icon, color: Colors.white, size: 20),
+            child: Icon(icon, color: darkBg, size: 20),
           ),
           prefixText: prefix,
           suffixText: suffix,
-          prefixStyle: const TextStyle(color: Color(0xFF00F5FF), fontSize: 16),
-          suffixStyle: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+          prefixStyle: const TextStyle(color: accentOrange, fontSize: 16),
+          suffixStyle: TextStyle(color: textSecondary, fontSize: 14),
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
         ),
@@ -564,19 +550,19 @@ class _PredictionScreenState extends State<PredictionScreen>
             decoration: BoxDecoration(
               gradient: _formProgress == 1.0
                   ? const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [accentOrange, accentOrangeDim],
               )
                   : LinearGradient(
                 colors: [
-                  Colors.grey.withOpacity(0.3),
-                  Colors.grey.withOpacity(0.2),
+                  textTertiary.withOpacity(0.3),
+                  textTertiary.withOpacity(0.2),
                 ],
               ),
               borderRadius: BorderRadius.circular(18),
               boxShadow: _formProgress == 1.0
                   ? [
                 BoxShadow(
-                  color: const Color(0xFF00F5FF).withOpacity(0.4),
+                  color: accentOrange.withOpacity(0.4),
                   blurRadius: 20,
                   offset: const Offset(0, 10),
                 ),
@@ -594,7 +580,7 @@ class _PredictionScreenState extends State<PredictionScreen>
                     width: 24,
                     height: 24,
                     child: CircularProgressIndicator(
-                      color: Colors.white,
+                      color: darkBg,
                       strokeWidth: 2,
                     ),
                   )
@@ -603,7 +589,7 @@ class _PredictionScreenState extends State<PredictionScreen>
                     children: [
                       Icon(
                         _formProgress == 1.0 ? Icons.rocket_launch : Icons.lock,
-                        color: Colors.white,
+                        color: _formProgress == 1.0 ? darkBg : textSecondary,
                         size: 24,
                       ),
                       const SizedBox(width: 12),
@@ -611,10 +597,10 @@ class _PredictionScreenState extends State<PredictionScreen>
                         _formProgress == 1.0
                             ? 'Launch Prediction AI'
                             : 'Complete All Fields',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: _formProgress == 1.0 ? darkBg : textSecondary,
                           fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.5,
                         ),
                       ),
@@ -639,15 +625,15 @@ class _PredictionScreenState extends State<PredictionScreen>
           decoration: BoxDecoration(
             gradient: LinearGradient(
               colors: [
-                const Color(0xFF00F5FF).withOpacity(0.15),
-                const Color(0xFF00D4AA).withOpacity(0.15),
+                accentOrange.withOpacity(0.15),
+                accentOrangeDim.withOpacity(0.15),
               ],
             ),
             borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: const Color(0xFF00F5FF).withOpacity(0.3)),
+            border: Border.all(color: accentOrange.withOpacity(0.3)),
             boxShadow: [
               BoxShadow(
-                color: const Color(0xFF00F5FF).withOpacity(0.2),
+                color: accentOrange.withOpacity(0.2),
                 blurRadius: 20,
                 offset: const Offset(0, 10),
               ),
@@ -663,12 +649,12 @@ class _PredictionScreenState extends State<PredictionScreen>
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       gradient: const LinearGradient(
-                        colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                        colors: [accentOrange, accentOrangeDim],
                       ),
                       borderRadius: BorderRadius.circular(15),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF00F5FF).withOpacity(0.5),
+                          color: accentOrange.withOpacity(0.5),
                           blurRadius: 15,
                           spreadRadius: 2,
                         ),
@@ -676,7 +662,7 @@ class _PredictionScreenState extends State<PredictionScreen>
                     ),
                     child: const Icon(
                       Icons.analytics,
-                      color: Colors.white,
+                      color: darkBg,
                       size: 32,
                     ),
                   ),
@@ -687,9 +673,9 @@ class _PredictionScreenState extends State<PredictionScreen>
               Text(
                 '🎉 Prediction Complete!',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.9),
+                  color: textPrimary,
                   fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
               const SizedBox(height: 12),
@@ -697,14 +683,14 @@ class _PredictionScreenState extends State<PredictionScreen>
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.1),
+                  color: cardDark,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white.withOpacity(0.2)),
+                  border: Border.all(color: borderColor),
                 ),
                 child: Text(
                   _predictionResult!,
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: textPrimary,
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
                   ),
@@ -718,19 +704,19 @@ class _PredictionScreenState extends State<PredictionScreen>
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 decoration: BoxDecoration(
                   gradient: const LinearGradient(
-                    colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                    colors: [accentOrange, accentOrangeDim],
                   ),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.star, color: Colors.white, size: 20),
+                    const Icon(Icons.star, color: darkBg, size: 20),
                     const SizedBox(width: 8),
                     const Text(
                       '+100 XP Earned!',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: darkBg,
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
                       ),

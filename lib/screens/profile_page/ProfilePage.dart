@@ -290,48 +290,6 @@ class _ProfilepageState extends State<Profilepage> {
                       ],
                     ),
                   ),
-                  GestureDetector(
-                    onTap: _showTopUpDialog,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          colors: [accentOrange, accentOrangeDim],
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                        ),
-                        borderRadius: BorderRadius.circular(12),
-                        boxShadow: [
-                          BoxShadow(
-                            color: accentOrange.withOpacity(0.3),
-                            blurRadius: 8,
-                            offset: const Offset(0, 4),
-                          ),
-                        ],
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.add_circle_outline,
-                            color: textPrimary,
-                            size: 18,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            "Add money",
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w600,
-                              color: textPrimary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
                 ],
               ),
             );
@@ -464,36 +422,6 @@ class _ProfilepageState extends State<Profilepage> {
 
         ],
       ),
-    );
-  }
-  void _showTopUpDialog() {
-    final controller = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Add demo money'),
-          content: TextField(
-            controller: controller,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(hintText: 'Enter amount'),
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-            TextButton(
-              onPressed: () async {
-                final amt = double.tryParse(controller.text.trim()) ?? 0;
-                if (amt > 0) {
-                  await _portfolio.topUp(amt);
-                }
-                if (!mounted) return;
-                Navigator.pop(context);
-              },
-              child: const Text('Add'),
-            ),
-          ],
-        );
-      },
     );
   }
 }

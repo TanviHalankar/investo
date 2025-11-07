@@ -1,7 +1,13 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:investo/screens/home_page/prediction_screen.dart';
+import '../services/user_data_service.dart';
+import '../news/eodhd_service.dart';
+import '../news/news_model.dart';
 
 
 class LearningScreen extends StatefulWidget {
@@ -21,8 +27,24 @@ class _LearningScreenState extends State<LearningScreen>
   late Animation<Offset> _slideAnimation;
 
   int selectedCategoryIndex = 0;
-  int completedLessons = 3; // Example progress
-  int totalLessons = 24;
+  int completedLessons = 0;
+  int totalLessons = 14; // 6 basics + 8 news
+  
+  // User data service
+  final UserDataService _userDataService = UserDataService.instance;
+  
+  // News service
+  final EodhdService _newsService = EodhdService();
+  final TextEditingController _newsSearchController = TextEditingController();
+  List<NewsArticle> _newsArticles = [];
+  bool _isLoadingNews = false;
+  String? _newsErrorMessage;
+  final List<String> _defaultTickers = ['AAPL.US', 'MSFT.US', 'TSLA.US'];
+  
+  // Time tracking
+  DateTime? _lessonStartTime;
+  String? _currentLessonTitle;
+  String? _currentLessonCategory;
 
   // Modern dark color scheme with orange accents (matching home screen)
   static const Color darkBg = Color(0xFF0D0D0D);
@@ -42,12 +64,12 @@ class _LearningScreenState extends State<LearningScreen>
   double get maxWidth => isWeb ? 600 : double.infinity;
   double get horizontalPadding => isWeb ? 40 : 20;
 
-  final List<LearningCategory> categories = [
+  List<LearningCategory> categories = [
     LearningCategory(
       title: 'Basics',
       icon: Icons.school_outlined,
       color: accentOrange,
-      completedLessons: 3,
+      completedLessons: 0,
       totalLessons: 6,
       description: 'Foundation concepts',
     ),
@@ -69,14 +91,14 @@ class _LearningScreenState extends State<LearningScreen>
     ),
   ];
 
-  final List<Lesson> basicLessons = [
+  List<Lesson> basicLessons = [
     Lesson(
       title: 'What is the Stock Market?',
       description: 'Understanding the fundamentals of stock trading',
       duration: '5 min',
       difficulty: 'Beginner',
-      isCompleted: true,
-      progress: 1.0,
+      isCompleted: false,
+      progress: 0.0,
       icon: Icons.trending_up,
     ),
     Lesson(
@@ -84,8 +106,8 @@ class _LearningScreenState extends State<LearningScreen>
       description: 'Growth, Value, Dividend stocks explained',
       duration: '7 min',
       difficulty: 'Beginner',
-      isCompleted: true,
-      progress: 1.0,
+      isCompleted: false,
+      progress: 0.0,
       icon: Icons.category,
     ),
     Lesson(
@@ -93,8 +115,8 @@ class _LearningScreenState extends State<LearningScreen>
       description: 'Basic chart patterns and indicators',
       duration: '10 min',
       difficulty: 'Beginner',
-      isCompleted: true,
-      progress: 1.0,
+      isCompleted: false,
+      progress: 0.0,
       icon: Icons.show_chart,
     ),
     Lesson(
@@ -126,7 +148,7 @@ class _LearningScreenState extends State<LearningScreen>
     ),
   ];
 
-  final List<Lesson> newsLessons = [
+  List<Lesson> newsLessons = [
     Lesson(
       title: 'Latest Market Trends',
       description: 'Current market movements and analysis',
@@ -201,7 +223,7 @@ class _LearningScreenState extends State<LearningScreen>
     ),
   ];
 
-  final List<Lesson> riskManagementLessons = [];
+  List<Lesson> riskManagementLessons = [];
 
   List<Lesson> getLessonsForCategory(int categoryIndex) {
     switch (categoryIndex) {
@@ -214,6 +236,99 @@ class _LearningScreenState extends State<LearningScreen>
       default:
         return basicLessons;
     }
+  }
+
+  String getCategoryName(int categoryIndex) {
+    switch (categoryIndex) {
+      case 0:
+        return 'Basics';
+      case 1:
+        return 'News';
+      case 2:
+        return 'Risk Mgmt';
+      default:
+        return 'Basics';
+    }
+  }
+
+  void _resetTimeTracking() {
+    if (_lessonStartTime != null && _currentLessonTitle != null && _currentLessonCategory != null) {
+      // Save time when dialog is dismissed without marking as completed
+      final timeSpent = DateTime.now().difference(_lessonStartTime!);
+      final timeSpentSeconds = timeSpent.inSeconds;
+      
+      if (timeSpentSeconds > 0) {
+        _userDataService.updateLessonTime(
+          _currentLessonCategory!,
+          _currentLessonTitle!,
+          timeSpentSeconds,
+        ).then((_) {
+          // Reload progress to update time display
+          if (mounted) {
+            setState(() {
+              // Trigger rebuild to show updated time
+            });
+          }
+        });
+      }
+    }
+    
+    _lessonStartTime = null;
+    _currentLessonTitle = null;
+    _currentLessonCategory = null;
+  }
+
+  String _formatTime(int totalSeconds) {
+    if (totalSeconds < 60) {
+      return '$totalSeconds sec';
+    } else if (totalSeconds < 3600) {
+      final minutes = totalSeconds ~/ 60;
+      final seconds = totalSeconds % 60;
+      return seconds > 0 ? '$minutes min $seconds sec' : '$minutes min';
+    } else {
+      final hours = totalSeconds ~/ 3600;
+      final minutes = (totalSeconds % 3600) ~/ 60;
+      final seconds = totalSeconds % 60;
+      if (minutes > 0 && seconds > 0) {
+        return '$hours hr $minutes min $seconds sec';
+      } else if (minutes > 0) {
+        return '$hours hr $minutes min';
+      } else {
+        return '$hours hr $seconds sec';
+      }
+    }
+  }
+
+  void _loadUserLessonProgress() {
+    // Update all categories' progress
+    for (int i = 0; i < categories.length; i++) {
+      final categoryName = getCategoryName(i);
+      final completedCount = _userDataService.getCompletedLessonsCount(categoryName);
+      categories[i].completedLessons = completedCount;
+    }
+    
+    // Update lessons for current category
+    final categoryName = getCategoryName(selectedCategoryIndex);
+    final lessons = getLessonsForCategory(selectedCategoryIndex);
+    
+    // Update lesson completion status based on user data
+    for (var lesson in lessons) {
+      final isCompleted = _userDataService.isLessonCompleted(categoryName, lesson.title);
+      final progress = _userDataService.getLessonProgress(categoryName, lesson.title);
+      
+      // Update lesson status
+      lesson.isCompleted = isCompleted;
+      lesson.progress = progress;
+    }
+    
+    // Update overall progress
+    int totalCompleted = 0;
+    for (var category in categories) {
+      totalCompleted += category.completedLessons;
+    }
+    completedLessons = totalCompleted;
+    
+    setState(() {});
   }
 
   @override
@@ -239,17 +354,156 @@ class _LearningScreenState extends State<LearningScreen>
 
     _fadeController.forward();
     _slideController.forward();
+    
+    // Load user-specific lesson progress
+    _loadUserLessonProgress();
   }
 
   @override
   void dispose() {
     _fadeController.dispose();
     _slideController.dispose();
+    _newsSearchController.dispose();
     super.dispose();
+  }
+  
+  Future<void> _loadNews({String? ticker}) async {
+    setState(() {
+      _isLoadingNews = true;
+      _newsErrorMessage = null;
+    });
+
+    try {
+      List<NewsArticle> articles;
+      if (ticker != null && ticker.isNotEmpty) {
+        articles = await _newsService.fetchNews(ticker);
+      } else {
+        articles = await _newsService.fetchMultipleNews(_defaultTickers);
+      }
+
+      setState(() {
+        _newsArticles = articles;
+        _isLoadingNews = false;
+      });
+    } catch (e) {
+      setState(() {
+        _newsErrorMessage = e.toString();
+        _isLoadingNews = false;
+      });
+    }
+  }
+
+  Future<void> _launchNewsUrl(String? url) async {
+    if (url == null || url.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('No URL available for this article'),
+          backgroundColor: negativeRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      final Uri uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        HapticFeedback.lightImpact();
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Cannot open article link'),
+            backgroundColor: negativeRed,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error opening article: $e'),
+          backgroundColor: negativeRed,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  void _onNewsSearchSubmitted(String value) {
+    if (value.trim().isEmpty) {
+      _loadNews();
+    } else {
+      String ticker = value.trim().toUpperCase();
+      if (!ticker.contains('.')) {
+        ticker = '$ticker.US';
+      }
+      _loadNews(ticker: ticker);
+    }
+  }
+
+  String _formatNewsDate(String dateString) {
+    try {
+      final DateTime date = DateTime.parse(dateString);
+      final Duration difference = DateTime.now().difference(date);
+      
+      if (difference.inHours < 1) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
+      } else {
+        return DateFormat('MMM d, yyyy').format(date);
+      }
+    } catch (e) {
+      return dateString;
+    }
+  }
+
+  String _getFirstParagraph(String content) {
+    final int endIndex = content.contains('\n\n')
+        ? content.indexOf('\n\n')
+        : (content.length > 200 ? 200 : content.length);
+    
+    String summary = content.substring(0, endIndex);
+    if (endIndex < content.length) {
+      summary += '...';
+    }
+    return summary;
   }
 
   @override
   Widget build(BuildContext context) {
+    // Special layout for News category
+    if (selectedCategoryIndex == 1) {
+      return Scaffold(
+        backgroundColor: darkBg,
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: BoxConstraints(maxWidth: maxWidth),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 24),
+                  _buildProgressCard(),
+                  const SizedBox(height: 28),
+                  _buildCategoryTabs(),
+                  const SizedBox(height: 28),
+                  _buildLessonsList(), // This will show news list
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+    
+    // Regular layout for other categories
     return Scaffold(
       backgroundColor: darkBg,
       body: SafeArea(
@@ -466,7 +720,15 @@ class _LearningScreenState extends State<LearningScreen>
               const SizedBox(height: 16),
               Row(
                 children: [
-                  _buildQuickStat('Time Invested', '2h 15m', Icons.schedule),
+                  Builder(
+                    builder: (context) {
+                      final totalTimeInvested = _userDataService.getTotalTimeInvested();
+                      final timeDisplay = totalTimeInvested > 0 
+                          ? _formatTime(totalTimeInvested) 
+                          : '0 sec';
+                      return _buildQuickStat('Time Invested', timeDisplay, Icons.schedule);
+                    },
+                  ),
                   const SizedBox(width: 24),
                   _buildQuickStat('Current Level', 'Beginner', Icons.emoji_events),
                 ],
@@ -535,6 +797,12 @@ class _LearningScreenState extends State<LearningScreen>
               }
               setState(() {
                 selectedCategoryIndex = index;
+                _loadUserLessonProgress();
+                
+                // Load news when News category is selected
+                if (index == 1 && _newsArticles.isEmpty) {
+                  _loadNews();
+                }
               });
               },
               child: Container(
@@ -589,6 +857,12 @@ class _LearningScreenState extends State<LearningScreen>
   }
 
   Widget _buildLessonsList() {
+    // Show news articles if News category is selected
+    if (selectedCategoryIndex == 1) {
+      return _buildNewsList();
+    }
+    
+    // Show regular lessons for other categories
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
       child: SlideTransition(
@@ -608,6 +882,336 @@ class _LearningScreenState extends State<LearningScreen>
             const SizedBox(height: 18),
             ...getLessonsForCategory(selectedCategoryIndex).map((lesson) => _buildLessonCard(lesson)),
           ],
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildNewsList() {
+    return Expanded(
+      child: Padding(
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
+        child: SlideTransition(
+          position: _slideAnimation,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Market News',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w700,
+                  color: textPrimary,
+                  letterSpacing: -0.5,
+                ),
+              ),
+              const SizedBox(height: 16),
+              // News search bar
+              Container(
+                decoration: BoxDecoration(
+                  color: cardDark,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor, width: 1),
+                ),
+                child: TextField(
+                  controller: _newsSearchController,
+                  style: const TextStyle(color: textPrimary),
+                  decoration: InputDecoration(
+                    hintText: 'Search ticker (e.g. GOOG.US)',
+                    hintStyle: const TextStyle(color: textTertiary),
+                    prefixIcon: const Icon(Icons.search, color: accentOrange),
+                    suffixIcon: _newsSearchController.text.isNotEmpty
+                        ? IconButton(
+                            icon: const Icon(Icons.clear, color: textSecondary),
+                            onPressed: () {
+                              _newsSearchController.clear();
+                              _loadNews();
+                              setState(() {});
+                            },
+                          )
+                        : null,
+                    filled: true,
+                    fillColor: cardLight,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                  ),
+                  onSubmitted: _onNewsSearchSubmitted,
+                  onChanged: (value) {
+                    setState(() {});
+                  },
+                ),
+              ),
+              const SizedBox(height: 18),
+              // News articles list
+              Expanded(
+                child: _isLoadingNews
+                    ? const Center(
+                        child: CircularProgressIndicator(
+                          color: accentOrange,
+                        ),
+                      )
+                    : _newsErrorMessage != null
+                        ? _buildNewsErrorWidget()
+                        : _newsArticles.isEmpty
+                            ? _buildNewsEmptyWidget()
+                            : RefreshIndicator(
+                                color: accentOrange,
+                                backgroundColor: cardDark,
+                                onRefresh: () => _loadNews(
+                                  ticker: _newsSearchController.text.trim().isEmpty
+                                      ? null
+                                      : _newsSearchController.text.trim().toUpperCase(),
+                                ),
+                                child: ListView.builder(
+                                  padding: const EdgeInsets.only(bottom: 16),
+                                  itemCount: _newsArticles.length,
+                                  itemBuilder: (context, index) {
+                                    return _buildNewsCard(_newsArticles[index]);
+                                  },
+                                ),
+                              ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+  
+  Widget _buildNewsErrorWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.error_outline,
+              size: 64,
+              color: negativeRed,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Failed to load news',
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _newsErrorMessage ?? 'Unknown error',
+              style: const TextStyle(
+                color: textSecondary,
+                fontSize: 14,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton.icon(
+              onPressed: _loadNews,
+              icon: const Icon(Icons.refresh),
+              label: const Text('Retry'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: accentOrange,
+                foregroundColor: darkBg,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsEmptyWidget() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.article_outlined,
+              size: 64,
+              color: textTertiary,
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'No news available',
+              style: TextStyle(
+                color: textPrimary,
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Try searching for a different ticker',
+              style: TextStyle(
+                color: textSecondary,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildNewsCard(NewsArticle article) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: cardDark,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: borderColor,
+          width: 1,
+        ),
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _launchNewsUrl(article.link),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Header: Date and Tags
+                Row(
+                  children: [
+                    Icon(
+                      Icons.access_time,
+                      size: 14,
+                      color: textTertiary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      _formatNewsDate(article.date),
+                      style: const TextStyle(
+                        color: textTertiary,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const Spacer(),
+                    if (article.symbols.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: accentOrangeDim.withOpacity(0.2),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                            color: accentOrangeDim,
+                            width: 1,
+                          ),
+                        ),
+                        child: Text(
+                          article.symbols.first,
+                          style: const TextStyle(
+                            color: accentOrange,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // Title
+                Text(
+                  article.title,
+                  style: const TextStyle(
+                    color: textPrimary,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    height: 1.3,
+                  ),
+                ),
+                const SizedBox(height: 8),
+
+                // Summary/Description
+                Text(
+                  _getFirstParagraph(article.content),
+                  style: const TextStyle(
+                    color: textSecondary,
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 12),
+
+                // Footer: Tags
+                if (article.tags.isNotEmpty)
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: article.tags.take(3).map((tag) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: cardLight,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          tag,
+                          style: const TextStyle(
+                            color: textTertiary,
+                            fontSize: 11,
+                          ),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+
+                // Read more indicator
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    const Spacer(),
+                    Text(
+                      'Tap to read more',
+                      style: TextStyle(
+                        color: accentOrange.withOpacity(0.8),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.arrow_forward,
+                      size: 14,
+                      color: accentOrange.withOpacity(0.8),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -739,6 +1343,13 @@ class _LearningScreenState extends State<LearningScreen>
   }
 
   void _showLessonDialog(Lesson lesson) {
+    // Reload lesson progress to ensure we have the latest status
+    final categoryName = getCategoryName(selectedCategoryIndex);
+    final isCompleted = _userDataService.isLessonCompleted(categoryName, lesson.title);
+    final progress = _userDataService.getLessonProgress(categoryName, lesson.title);
+    lesson.isCompleted = isCompleted;
+    lesson.progress = progress;
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -853,10 +1464,17 @@ class _LearningScreenState extends State<LearningScreen>
   }
 
   void _showLessonContent(Lesson lesson) {
+    // Start tracking time
+    final categoryName = getCategoryName(selectedCategoryIndex);
+    _lessonStartTime = DateTime.now();
+    _currentLessonTitle = lesson.title;
+    _currentLessonCategory = categoryName;
+    
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      isDismissible: true,
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.9,
         maxChildSize: 0.95,
@@ -977,26 +1595,80 @@ class _LearningScreenState extends State<LearningScreen>
                       const SizedBox(height: 30),
                       ElevatedButton(
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: accentOrange,
+                          backgroundColor: lesson.isCompleted ? positiveGreen : accentOrange,
                           foregroundColor: darkBg,
                           padding: const EdgeInsets.symmetric(vertical: 16),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        onPressed: () {
-                          // Mark lesson as completed
-                          setState(() {
-                            if (!lesson.isCompleted) {
-                              completedLessons++;
-                              // In a real app, you would update the lesson's completed status
+                        onPressed: () async {
+                          // Calculate time spent
+                          int timeSpentSeconds = 0;
+                          if (_lessonStartTime != null) {
+                            final timeSpent = DateTime.now().difference(_lessonStartTime!);
+                            timeSpentSeconds = timeSpent.inSeconds;
+                          }
+                          
+                          if (lesson.isCompleted) {
+                            // Save time even if already completed
+                            if (timeSpentSeconds > 0) {
+                              await _userDataService.updateLessonTime(
+                                _currentLessonCategory ?? getCategoryName(selectedCategoryIndex),
+                                lesson.title,
+                                timeSpentSeconds,
+                              );
                             }
-                          });
-                          Navigator.pop(context);
+                            Navigator.pop(context);
+                            _resetTimeTracking();
+                            return;
+                          }
+                          
+                          // Mark lesson as completed with time spent
+                          final categoryName = getCategoryName(selectedCategoryIndex);
+                          final success = await _userDataService.markLessonCompleted(
+                            categoryName, 
+                            lesson.title,
+                            timeSpentSeconds: timeSpentSeconds > 0 ? timeSpentSeconds : null,
+                          );
+                          
+                          if (success) {
+                            // Update lesson status locally
+                            setState(() {
+                              lesson.isCompleted = true;
+                              lesson.progress = 1.0;
+                              _loadUserLessonProgress();
+                            });
+                            
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('${lesson.title} marked as completed! 🎉'),
+                                  backgroundColor: positiveGreen,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          } else {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to save lesson progress. Please try again.'),
+                                  backgroundColor: negativeRed,
+                                  behavior: SnackBarBehavior.floating,
+                                ),
+                              );
+                            }
+                          }
+                          
+                          if (mounted) {
+                            Navigator.pop(context);
+                          }
+                          _resetTimeTracking();
                         },
-                        child: const Text(
-                          'Mark as Completed',
-                          style: TextStyle(
+                        child: Text(
+                          lesson.isCompleted ? 'Completed ✓' : 'Mark as Completed',
+                          style: const TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w700,
                           ),
@@ -1011,7 +1683,10 @@ class _LearningScreenState extends State<LearningScreen>
           ),
         ),
       ),
-    );
+    ).then((_) {
+      // Save time when bottom sheet is dismissed
+      _resetTimeTracking();
+    });
   }
 
   Widget _buildLessonContentSection(String title, List<Widget> children) {
@@ -1137,7 +1812,7 @@ class LearningCategory {
   final String title;
   final IconData icon;
   final Color color;
-  final int completedLessons;
+  int completedLessons;
   final int totalLessons;
   final String description;
 
@@ -1156,8 +1831,8 @@ class Lesson {
   final String description;
   final String duration;
   final String difficulty;
-  final bool isCompleted;
-  final double progress;
+  bool isCompleted;
+  double progress;
   final IconData icon;
 
   Lesson({

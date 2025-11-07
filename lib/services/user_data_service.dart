@@ -40,6 +40,7 @@ class UserDataService {
       userMap['preferences'] = _sanitizeMap(user.preferences);
       userMap['portfolio'] = _sanitizeMap(user.portfolio);
       userMap['settings'] = _sanitizeMap(user.settings);
+      userMap['lessons'] = _sanitizeMap(user.lessons);
 
       // Save user data with user-specific key
       final userDataKey = '$_userDataPrefix${user.userId}';
@@ -73,6 +74,7 @@ class UserDataService {
                   'preferences': user.preferences,
                   'portfolio': user.portfolio,
                   'settings': user.settings,
+                  'lessons': user.lessons,
                 }, SetOptions(merge: true));
           } catch (e) {
             print('Error syncing user data to Firestore: $e');
@@ -418,13 +420,12 @@ class UserDataService {
     
     // Update portfolio
     final newMoney = currentMoney - totalCost;
-    final totalInvested = (_currentUser!.portfolio['totalInvested'] as num?)?.toDouble() ?? 0.0;
-    final newTotalInvested = totalInvested + totalCost;
+    // Don't update totalInvested here - it should track actual money spent, not current holdings value
+    // totalInvested is used for tracking how much was originally invested
     
     final success = await updateUserPortfolio({
       'virtualMoney': newMoney,
       'holdings': holdings,
-      'totalInvested': newTotalInvested,
     });
     
     if (!success) return false;
@@ -440,7 +441,6 @@ class UserDataService {
           // Keep existing portfolio map updates
           'portfolio': {
             'virtualMoney': newMoney,
-            'totalInvested': newTotalInvested,
             'holdings': holdings,
           },
           // Add top-level cashBalance so PortfolioService can load it later
@@ -519,6 +519,7 @@ class UserDataService {
       final preferences = Map<String, dynamic>.from(data['preferences'] ?? {});
       final portfolio = Map<String, dynamic>.from(data['portfolio'] ?? {});
       final settings = Map<String, dynamic>.from(data['settings'] ?? {});
+      final lessons = Map<String, dynamic>.from(data['lessons'] ?? {});
 
       // Merge and sanitize watchlist subcollection
       try {
@@ -564,6 +565,7 @@ class UserDataService {
         preferences: preferences,
         portfolio: portfolio,
         settings: settings,
+        lessons: lessons,
       );
 
       await saveUserData(user);
@@ -605,15 +607,11 @@ class UserDataService {
       };
     }
     
-    // Update portfolio
-    final totalInvested = (_currentUser!.portfolio['totalInvested'] as num?)?.toDouble() ?? 0.0;
-    final soldValue = (currentHolding['avgPrice'] as num).toDouble() * quantity;
-    final newTotalInvested = totalInvested - soldValue;
-    
+    // Update portfolio - don't modify totalInvested on sell
+    // totalInvested tracks original investment, not current holdings
     final success = await updateUserPortfolio({
       'virtualMoney': newMoney,
       'holdings': holdings,
-      'totalInvested': newTotalInvested,
     });
     
     if (!success) return false;
@@ -628,7 +626,6 @@ class UserDataService {
         await userDoc.set({
           'portfolio': {
             'virtualMoney': newMoney,
-            'totalInvested': newTotalInvested,
             'holdings': holdings,
           },
           'updatedAt': DateTime.now().toUtc(),
@@ -704,6 +701,123 @@ class UserDataService {
     return await setUserSpecificData('totalReturns', newTotalReturns, category: 'portfolio');
   }
 
+  // Calculate current portfolio value (cash + current value of holdings)
+  // This should be called with current stock prices
+  double calculatePortfolioValue(Map<String, double> currentPrices) {
+    if (_currentUser == null) return 10000.0;
+    
+    final virtualMoney = getVirtualMoney();
+    final holdings = getHoldings();
+    
+    double holdingsValue = 0.0;
+    holdings.forEach((symbol, holdingData) {
+      final quantity = (holdingData['quantity'] as num?)?.toInt() ?? 0;
+      final currentPrice = currentPrices[symbol] ?? 0.0;
+      holdingsValue += quantity * currentPrice;
+    });
+    
+    return virtualMoney + holdingsValue;
+  }
+
+  // Calculate total profit/loss (current portfolio value - initial investment)
+  // Initial investment = starting money (10000) - no money can be added
+  double calculateProfitLoss(Map<String, double> currentPrices) {
+    if (_currentUser == null) return 0.0;
+    
+    final portfolioValue = calculatePortfolioValue(currentPrices);
+    final initialMoney = (_currentUser!.portfolio['initialMoney'] as num?)?.toDouble() ?? 10000.0;
+    // No money can be added, so total invested is just initial money
+    final totalInvested = initialMoney;
+    
+    return portfolioValue - totalInvested;
+  }
+
+  // Calculate return percentage
+  double calculateReturnPercentage(Map<String, double> currentPrices) {
+    if (_currentUser == null) return 0.0;
+    
+    final initialMoney = (_currentUser!.portfolio['initialMoney'] as num?)?.toDouble() ?? 10000.0;
+    
+    if (initialMoney == 0) return 0.0;
+    
+    final profitLoss = calculateProfitLoss(currentPrices);
+    return (profitLoss / initialMoney) * 100;
+  }
+
+  // Add money to virtual account - DISABLED to keep leaderboard fair
+  // Users should not be able to add money as it would make the leaderboard unfair
+  @Deprecated('Add money feature disabled to maintain fair leaderboard')
+  Future<bool> addMoney(double amount) async {
+    // Feature disabled - return false
+    return false;
+  }
+
+  // Update portfolio score for leaderboard
+  Future<bool> updatePortfolioScore(Map<String, double> currentPrices) async {
+    if (_currentUser == null) return false;
+    
+    final portfolioValue = calculatePortfolioValue(currentPrices);
+    final profitLoss = calculateProfitLoss(currentPrices);
+    final returnPercent = calculateReturnPercentage(currentPrices);
+    
+    // Calculate score: portfolio value + profit/loss bonus
+    // Higher portfolio value = higher score, profit adds bonus
+    final score = portfolioValue + (profitLoss * 0.1); // Profit adds 10% bonus to score
+    
+    final success = await setUserSpecificData('portfolioValue', portfolioValue, category: 'portfolio');
+    if (!success) return false;
+    
+    // Sync to Firestore for leaderboard - ensure username is also set
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid != null) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'username': _currentUser!.username, // Ensure username is always set
+          'email': _currentUser!.email, // Ensure email is always set
+          'portfolioValue': portfolioValue,
+          'profitLoss': profitLoss,
+          'returnPercent': returnPercent,
+          'points': score, // Use score for leaderboard ranking
+          'updatedAt': DateTime.now().toUtc(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error syncing portfolio score to Firestore: $e');
+    }
+    
+    return true;
+  }
+  
+  // Initialize user score in Firestore (call this on login)
+  Future<void> initializeUserScore() async {
+    if (_currentUser == null) return;
+    
+    try {
+      final uid = FirebaseAuth.instance.currentUser?.uid;
+      if (uid == null) return;
+      
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      
+      // Only initialize if user doesn't have points/portfolioValue set
+      if (!userDoc.exists || 
+          (userDoc.data()?['points'] == null && userDoc.data()?['portfolioValue'] == null)) {
+        final initialMoney = (_currentUser!.portfolio['initialMoney'] as num?)?.toDouble() ?? 10000.0;
+        
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'username': _currentUser!.username,
+          'email': _currentUser!.email,
+          'portfolioValue': initialMoney,
+          'points': initialMoney,
+          'returnPercent': 0.0,
+          'profitLoss': 0.0,
+          'updatedAt': DateTime.now().toUtc(),
+        }, SetOptions(merge: true));
+      }
+    } catch (e) {
+      print('Error initializing user score: $e');
+    }
+  }
+
   // Get portfolio summary
   Map<String, dynamic> getPortfolioSummary() {
     if (_currentUser == null) {
@@ -728,6 +842,224 @@ class UserDataService {
       'totalValue': virtualMoney + totalInvested + totalReturns,
       'holdingsCount': holdings.length,
     };
+  }
+
+  // LESSON MANAGEMENT
+  // Mark lesson as completed with time spent (in seconds)
+  Future<bool> markLessonCompleted(String category, String lessonTitle, {int? timeSpentSeconds}) async {
+    if (_currentUser == null) {
+      print('Cannot mark lesson as completed: No current user');
+      return false;
+    }
+    
+    print('Marking lesson as completed: $category - $lessonTitle for user: ${_currentUser!.username}');
+    
+    final lessons = Map<String, dynamic>.from(_currentUser!.lessons);
+    if (!lessons.containsKey(category)) {
+      lessons[category] = <String, dynamic>{};
+    }
+    
+    final categoryLessons = Map<String, dynamic>.from(lessons[category] as Map<String, dynamic>? ?? {});
+    
+    // Get existing lesson data if any
+    final existingLesson = categoryLessons[lessonTitle] as Map<String, dynamic>? ?? {};
+    final existingTimeSpent = (existingLesson['timeSpentSeconds'] as num?)?.toInt() ?? 0;
+    
+    // If timeSpentSeconds is provided, add it to existing time; otherwise keep existing
+    final totalTimeSpent = timeSpentSeconds != null 
+        ? existingTimeSpent + timeSpentSeconds 
+        : existingTimeSpent;
+    
+    categoryLessons[lessonTitle] = {
+      'completed': true,
+      'completedAt': DateTime.now().millisecondsSinceEpoch,
+      'progress': 1.0,
+      'timeSpentSeconds': totalTimeSpent,
+      'lastUpdated': DateTime.now().millisecondsSinceEpoch,
+    };
+    
+    lessons[category] = categoryLessons;
+    
+    print('Updated lessons: $lessons');
+    final success = await updateUserLessons(lessons);
+    print('Lesson save result: $success');
+    return success;
+  }
+
+  // Update time spent on a lesson (even if not completed)
+  Future<bool> updateLessonTime(String category, String lessonTitle, int timeSpentSeconds) async {
+    if (_currentUser == null) {
+      print('Cannot update lesson time: No current user');
+      return false;
+    }
+    
+    final lessons = Map<String, dynamic>.from(_currentUser!.lessons);
+    if (!lessons.containsKey(category)) {
+      lessons[category] = <String, dynamic>{};
+    }
+    
+    final categoryLessons = Map<String, dynamic>.from(lessons[category] as Map<String, dynamic>? ?? {});
+    
+    // Get existing lesson data if any
+    final existingLesson = categoryLessons[lessonTitle] as Map<String, dynamic>? ?? {};
+    final existingTimeSpent = (existingLesson['timeSpentSeconds'] as num?)?.toInt() ?? 0;
+    final totalTimeSpent = existingTimeSpent + timeSpentSeconds;
+    
+    categoryLessons[lessonTitle] = {
+      ...existingLesson,
+      'timeSpentSeconds': totalTimeSpent,
+      'lastUpdated': DateTime.now().millisecondsSinceEpoch,
+      'completed': existingLesson['completed'] ?? false,
+      'progress': existingLesson['progress'] ?? 0.0,
+    };
+    
+    lessons[category] = categoryLessons;
+    
+    return await updateUserLessons(lessons);
+  }
+
+  // Get time spent on a specific lesson (in seconds)
+  int getLessonTimeSpent(String category, String lessonTitle) {
+    if (_currentUser == null) return 0;
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return 0;
+    
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons == null || !categoryLessons.containsKey(lessonTitle)) {
+      return 0;
+    }
+    
+    final lessonData = categoryLessons[lessonTitle] as Map<String, dynamic>?;
+    return (lessonData?['timeSpentSeconds'] as num?)?.toInt() ?? 0;
+  }
+
+  // Get total time invested across all lessons (in seconds)
+  int getTotalTimeInvested() {
+    if (_currentUser == null) return 0;
+    
+    int totalSeconds = 0;
+    final lessons = _currentUser!.lessons;
+    
+    lessons.forEach((category, categoryLessons) {
+      if (categoryLessons is Map<String, dynamic>) {
+        categoryLessons.forEach((lessonTitle, lessonData) {
+          if (lessonData is Map<String, dynamic>) {
+            final timeSpent = (lessonData['timeSpentSeconds'] as num?)?.toInt() ?? 0;
+            totalSeconds += timeSpent;
+          }
+        });
+      }
+    });
+    
+    return totalSeconds;
+  }
+
+  // Get total time invested for a specific category (in seconds)
+  int getCategoryTimeInvested(String category) {
+    if (_currentUser == null) return 0;
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return 0;
+    
+    int totalSeconds = 0;
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons != null) {
+      categoryLessons.forEach((lessonTitle, lessonData) {
+        if (lessonData is Map<String, dynamic>) {
+          final timeSpent = (lessonData['timeSpentSeconds'] as num?)?.toInt() ?? 0;
+          totalSeconds += timeSpent;
+        }
+      });
+    }
+    
+    return totalSeconds;
+  }
+
+  // Check if lesson is completed
+  bool isLessonCompleted(String category, String lessonTitle) {
+    if (_currentUser == null) return false;
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return false;
+    
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons == null || !categoryLessons.containsKey(lessonTitle)) {
+      return false;
+    }
+    
+    final lessonData = categoryLessons[lessonTitle] as Map<String, dynamic>?;
+    return lessonData?['completed'] == true;
+  }
+
+  // Get lesson progress
+  double getLessonProgress(String category, String lessonTitle) {
+    if (_currentUser == null) return 0.0;
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return 0.0;
+    
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons == null || !categoryLessons.containsKey(lessonTitle)) {
+      return 0.0;
+    }
+    
+    final lessonData = categoryLessons[lessonTitle] as Map<String, dynamic>?;
+    return (lessonData?['progress'] as num?)?.toDouble() ?? 0.0;
+  }
+
+  // Get completed lessons count for a category
+  int getCompletedLessonsCount(String category) {
+    if (_currentUser == null) return 0;
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return 0;
+    
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons == null) return 0;
+    
+    int count = 0;
+    categoryLessons.forEach((key, value) {
+      if (value is Map<String, dynamic> && value['completed'] == true) {
+        count++;
+      }
+    });
+    
+    return count;
+  }
+
+  // Get all completed lessons for a category
+  List<String> getCompletedLessons(String category) {
+    if (_currentUser == null) return [];
+    
+    final lessons = _currentUser!.lessons;
+    if (!lessons.containsKey(category)) return [];
+    
+    final categoryLessons = lessons[category] as Map<String, dynamic>?;
+    if (categoryLessons == null) return [];
+    
+    final completed = <String>[];
+    categoryLessons.forEach((key, value) {
+      if (value is Map<String, dynamic> && value['completed'] == true) {
+        completed.add(key);
+      }
+    });
+    
+    return completed;
+  }
+
+  // Update user lessons
+  Future<bool> updateUserLessons(Map<String, dynamic> lessons) async {
+    if (_currentUser == null) return false;
+    
+    final updatedUser = _currentUser!.copyWith(lessons: lessons);
+    return await updateCurrentUser(updatedUser);
+  }
+
+  // Get all lesson progress
+  Map<String, dynamic> getAllLessonProgress() {
+    if (_currentUser == null) return {};
+    return _currentUser!.lessons;
   }
 }
 

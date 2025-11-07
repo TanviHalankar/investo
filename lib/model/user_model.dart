@@ -8,6 +8,7 @@ class UserModel {
   final Map<String, dynamic> preferences;
   final Map<String, dynamic> portfolio;
   final Map<String, dynamic> settings;
+  final Map<String, dynamic> lessons;
 
   UserModel({
     required this.userId,
@@ -19,6 +20,7 @@ class UserModel {
     this.preferences = const {},
     this.portfolio = const {},
     this.settings = const {},
+    this.lessons = const {},
   });
 
   // Convert UserModel to Map for SharedPreferences storage
@@ -33,6 +35,7 @@ class UserModel {
       'preferences': preferences,
       'portfolio': portfolio,
       'settings': settings,
+      'lessons': lessons,
     };
   }
 
@@ -48,6 +51,7 @@ class UserModel {
       preferences: Map<String, dynamic>.from(json['preferences'] ?? {}),
       portfolio: Map<String, dynamic>.from(json['portfolio'] ?? {}),
       settings: Map<String, dynamic>.from(json['settings'] ?? {}),
+      lessons: Map<String, dynamic>.from(json['lessons'] ?? {}),
     );
   }
 
@@ -62,6 +66,7 @@ class UserModel {
     Map<String, dynamic>? preferences,
     Map<String, dynamic>? portfolio,
     Map<String, dynamic>? settings,
+    Map<String, dynamic>? lessons,
   }) {
     return UserModel(
       userId: userId ?? this.userId,
@@ -73,6 +78,7 @@ class UserModel {
       preferences: preferences ?? this.preferences,
       portfolio: portfolio ?? this.portfolio,
       settings: settings ?? this.settings,
+      lessons: lessons ?? this.lessons,
     );
   }
 

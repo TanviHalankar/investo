@@ -22,6 +22,17 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordController = TextEditingController();
   final _auth = FirebaseAuth.instance;
 
+  // Modern dark color scheme with orange accents (matching home_screen.dart)
+  static const Color darkBg = Color(0xFF0D0D0D);
+  static const Color cardDark = Color(0xFF1A1A1A);
+  static const Color cardLight = Color(0xFF242424);
+  static const Color accentOrange = Color(0xFFFF9500);
+  static const Color accentOrangeDim = Color(0xFFCC7700);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFF999999);
+  static const Color textTertiary = Color(0xFF666666);
+  static const Color borderColor = Color(0xFF2A2A2A);
+
   AnimationController? _controller;
   Animation<double>? _fadeAnimation;
   Animation<Offset>? _slideAnimation;
@@ -69,11 +80,11 @@ class _LoginScreenState extends State<LoginScreen>
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      
+
       if (userCredential.user != null) {
         final user = userCredential.user!;
         final username = user.email!.split('@')[0];
-        
+
         // Ensure Firestore has a baseline user doc
         final usersRef = FirebaseFirestore.instance.collection('users').doc(user.uid);
         final snap = await usersRef.get();
@@ -85,19 +96,29 @@ class _LoginScreenState extends State<LoginScreen>
             'lastLogin': FieldValue.serverTimestamp(),
             'portfolio': {
               'virtualMoney': 10000.0,
+              'initialMoney': 10000.0,
+              'totalMoneyAdded': 0.0,
               'totalInvested': 0.0,
               'totalReturns': 0.0,
               'holdings': <String, dynamic>{},
               'watchlist': <String, dynamic>{},
             },
+            'lessons': {
+              'Basics': <String, dynamic>{},
+              'News': <String, dynamic>{},
+              'Risk Mgmt': <String, dynamic>{},
+            },
           }, SetOptions(merge: true));
         } else {
           await usersRef.set({'lastLogin': FieldValue.serverTimestamp()}, SetOptions(merge: true));
         }
-    
+
         // Hydrate local cache from Firestore (preserves money/watchlist)
         await UserDataService.instance.loadFromRemote();
-    
+        
+        // Initialize user score in leaderboard
+        await UserDataService.instance.initializeUserScore();
+
         // Navigate via named route to keep consistency with AuthGate
         Navigator.pushReplacementNamed(
           context,
@@ -151,22 +172,11 @@ class _LoginScreenState extends State<LoginScreen>
 
     return Scaffold(
       resizeToAvoidBottomInset: true,
+      backgroundColor: darkBg,
       body: Container(
         width: size.width,
         height: size.height,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0F0C29),
-              Color(0xFF24243e),
-              Color(0xFF302B63),
-              Color(0xFF0F0C29),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
+        color: darkBg,
         child: Stack(
           children: [
             // Animated floating elements
@@ -239,7 +249,7 @@ class _LoginScreenState extends State<LoginScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withOpacity(0.1),
+                    accentOrange.withOpacity(0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -261,30 +271,21 @@ class _LoginScreenState extends State<LoginScreen>
       constraints: const BoxConstraints(maxWidth: 400),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.25),
-            Colors.white.withOpacity(0.15),
-          ],
+          colors: [cardDark, cardLight],
         ),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1.5,
+          color: borderColor,
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.5),
             blurRadius: 30,
             offset: const Offset(0, 20),
-            spreadRadius: -5,
-          ),
-          BoxShadow(
-            color: Colors.white.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -10),
             spreadRadius: -5,
           ),
         ],
@@ -303,16 +304,12 @@ class _LoginScreenState extends State<LoginScreen>
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF00F5FF),
-                        Color(0xFF00D4AA),
-                        Color(0xFF00F5FF),
-                      ],
+                      colors: [accentOrange, accentOrangeDim, accentOrange],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFF00F5FF).withOpacity(0.5),
+                        color: accentOrange.withOpacity(0.5),
                         blurRadius: 15,
                         spreadRadius: 1,
                       ),
@@ -321,7 +318,7 @@ class _LoginScreenState extends State<LoginScreen>
                   child: const Icon(
                     Icons.trending_up_rounded,
                     size: 40,
-                    color: Colors.white,
+                    color: darkBg,
                   ),
                 ),
               );
@@ -334,26 +331,21 @@ class _LoginScreenState extends State<LoginScreen>
           const SizedBox(height: 20),
 
           // Welcome text with gradient - smaller font
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.white, Color(0xFF00F5FF)],
-            ).createShader(bounds),
-            child: const Text(
-              'Welcome Back!',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
+          const Text(
+            'Welcome Back!',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+              letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'Login to StockMaster',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.white.withOpacity(0.8),
+              color: textSecondary,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -383,14 +375,14 @@ class _LoginScreenState extends State<LoginScreen>
             height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [accentOrange, accentOrangeDim],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFF00F5FF).withOpacity(0.4),
+                  color: accentOrange.withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -405,9 +397,9 @@ class _LoginScreenState extends State<LoginScreen>
                   child: Text(
                     'Sign In',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: darkBg,
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -423,7 +415,7 @@ class _LoginScreenState extends State<LoginScreen>
               Expanded(
                 child: Container(
                   height: 1,
-                  color: Colors.white.withOpacity(0.3),
+                  color: borderColor,
                 ),
               ),
               Padding(
@@ -431,7 +423,7 @@ class _LoginScreenState extends State<LoginScreen>
                 child: Text(
                   'or continue with',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: textSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -439,7 +431,7 @@ class _LoginScreenState extends State<LoginScreen>
               Expanded(
                 child: Container(
                   height: 1,
-                  color: Colors.white.withOpacity(0.3),
+                  color: borderColor,
                 ),
               ),
             ],
@@ -483,14 +475,14 @@ class _LoginScreenState extends State<LoginScreen>
               text: TextSpan(
                 text: "Don't have an account? ",
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: textSecondary,
                   fontSize: 14,
                 ),
                 children: const [
                   TextSpan(
                     text: "Sign up",
                     style: TextStyle(
-                      color: Color(0xFF00F5FF),
+                      color: accentOrange,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -512,33 +504,26 @@ class _LoginScreenState extends State<LoginScreen>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: cardDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: borderColor,
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: TextField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
         style: const TextStyle(
-          color: Colors.white,
+          color: textPrimary,
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: textSecondary,
             fontSize: 13,
           ),
           prefixIcon: Container(
@@ -546,13 +531,13 @@ class _LoginScreenState extends State<LoginScreen>
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFF00F5FF), Color(0xFF00D4AA)],
+                colors: [accentOrange, accentOrangeDim],
               ),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
               icon,
-              color: Colors.white,
+              color: darkBg,
               size: 18,
             ),
           ),
@@ -577,19 +562,12 @@ class _LoginScreenState extends State<LoginScreen>
       width: 120,
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: cardDark,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: borderColor,
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -601,14 +579,14 @@ class _LoginScreenState extends State<LoginScreen>
             children: [
               Icon(
                 icon,
-                color: Colors.white,
+                color: textPrimary,
                 size: 20,
               ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),

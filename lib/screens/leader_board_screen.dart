@@ -27,25 +27,97 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
   Stream<List<LeaderboardEntry>> _leaderboardStream() {
     return FirebaseFirestore.instance
         .collection('users')
-        .orderBy('points', descending: true)
-        .limit(100)
         .snapshots()
         .map((snap) {
       final uid = FirebaseAuth.instance.currentUser?.uid;
+      
+      // Get all users and calculate their scores - ensure we process ALL users
+      final users = <Map<String, dynamic>>[];
+      
+      for (var doc in snap.docs) {
+        try {
+          final data = doc.data();
+          
+          // Get username - try multiple sources
+          String username = 'User';
+          if (data['username'] != null) {
+            username = data['username'].toString();
+          } else if (data['email'] != null) {
+            final email = data['email'].toString();
+            username = email.split('@').first;
+          }
+          
+          // Get portfolio value - check multiple sources
+          double portfolioValue = 0.0;
+          if (data['portfolioValue'] != null) {
+            portfolioValue = (data['portfolioValue'] as num).toDouble();
+          } else if (data['totalValue'] != null) {
+            portfolioValue = (data['totalValue'] as num).toDouble();
+          } else if (data['portfolio'] != null && data['portfolio'] is Map) {
+            final portfolio = data['portfolio'] as Map;
+            final virtualMoney = (portfolio['virtualMoney'] as num?)?.toDouble() ?? 10000.0;
+            portfolioValue = virtualMoney; // Default to initial money if no holdings
+          } else {
+            portfolioValue = 10000.0; // Default starting amount
+          }
+          
+          final returnPercent = (data['returnPercent'] as num?)?.toDouble() ?? 0.0;
+          final points = (data['points'] as num?)?.toDouble() ?? 0.0;
+          
+          // Calculate score - use points if available, otherwise use portfolio value
+          final score = points > 0 ? points : portfolioValue;
+          
+          users.add({
+            'id': doc.id,
+            'username': username,
+            'portfolioValue': portfolioValue,
+            'returnPercent': returnPercent,
+            'points': score,
+            'isCurrentUser': doc.id == uid,
+          });
+        } catch (e) {
+          print('Error processing user ${doc.id}: $e');
+          // Still add user with default values
+          users.add({
+            'id': doc.id,
+            'username': 'User',
+            'portfolioValue': 10000.0,
+            'returnPercent': 0.0,
+            'points': 10000.0,
+            'isCurrentUser': doc.id == uid,
+          });
+        }
+      }
+      
+      // Sort by points/score descending - ensure stable sort
+      users.sort((a, b) {
+        final scoreA = a['points'] as double;
+        final scoreB = b['points'] as double;
+        final scoreCompare = scoreB.compareTo(scoreA);
+        // If scores are equal, sort by username for consistency
+        if (scoreCompare == 0) {
+          return (a['username'] as String).compareTo(b['username'] as String);
+        }
+        return scoreCompare;
+      });
+      
+      // Build leaderboard entries with ranks
       int rank = 0;
-      return snap.docs.map((d) {
+      return users.map((user) {
         rank++;
-        final data = d.data();
+        final points = user['points'] as double;
+        final level = (points / 10000).floor() + 1;
+        
         return LeaderboardEntry(
           rank: rank,
-          username: (data['username'] ?? 'User') as String,
-          portfolioValue: (data['totalValue'] as num?)?.toDouble() ?? 0,
-          totalReturn: 0.0, // optional: compute from invested vs totalValue
-          level: 1, // optional: map points to levels
-          streak: 0, // optional
+          username: user['username'] as String,
+          portfolioValue: user['portfolioValue'] as double,
+          totalReturn: user['returnPercent'] as double,
+          level: level,
+          streak: 0,
           badge: rank == 1 ? '🏆' : rank == 2 ? '🥈' : rank == 3 ? '🥉' : '⭐',
-          experience: (data['points'] as num?)?.toInt() ?? 0,
-          isCurrentUser: d.id == uid,
+          experience: points.toInt(),
+          isCurrentUser: user['isCurrentUser'] as bool,
         );
       }).toList();
     });
@@ -116,17 +188,63 @@ class _LeaderBoardScreenState extends State<LeaderBoardScreen>
                     child: StreamBuilder<List<LeaderboardEntry>>(
                       stream: _leaderboardStream(),
                       builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(
+                              color: Color(0xFFfdcb6e),
+                            ),
+                          );
+                        }
+                        
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Error loading leaderboard: ${snapshot.error}',
+                              style: const TextStyle(color: Colors.white),
+                            ),
+                          );
+                        }
+                        
                         final entries = snapshot.data ?? [];
+                        
+                        if (entries.isEmpty) {
+                          return Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.leaderboard_outlined,
+                                  size: 64,
+                                  color: Colors.white54,
+                                ),
+                                const SizedBox(height: 16),
+                                const Text(
+                                  'No users found',
+                                  style: TextStyle(
+                                    color: Colors.white54,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+                        
                         return SingleChildScrollView(
                           child: Padding(
                             padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
                             child: Column(
                               children: [
                                 const SizedBox(height: 20),
-                                if (entries.isNotEmpty)
+                                if (entries.length >= 3)
                                   FadeTransition(
                                     opacity: _fadeAnimation,
                                     child: _buildPodium(entries.take(3).toList()),
+                                  )
+                                else if (entries.isNotEmpty)
+                                  FadeTransition(
+                                    opacity: _fadeAnimation,
+                                    child: _buildPodium(entries),
                                   ),
                                 const SizedBox(height: 30),
                                 FadeTransition(

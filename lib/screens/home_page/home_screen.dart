@@ -236,6 +236,24 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
     });
   }
 
+  void _updatePortfolioScore(List<Map<String, dynamic>> stocks) {
+    // Build current prices map from stocks
+    final currentPrices = <String, double>{};
+    for (var stock in stocks) {
+      final symbol = stock['symbol'] as String?;
+      final priceStr = stock['price']?.toString().replaceAll(',', '') ?? '0';
+      final price = double.tryParse(priceStr) ?? 0.0;
+      if (symbol != null && price > 0) {
+        currentPrices[symbol] = price;
+      }
+    }
+    
+    // Update portfolio score if we have prices
+    if (currentPrices.isNotEmpty) {
+      UserDataService.instance.updatePortfolioScore(currentPrices);
+    }
+  }
+
   Widget _buildPortfolioSummary() {
     // Use PortfolioService for accurate, persisted portfolio values
     final portfolio = PortfolioService();
@@ -395,6 +413,10 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
 
       // Refresh user data and force rebuild so summary reflects changes
       await _loadUserData();
+      
+      // Update portfolio score after buying
+      _updatePortfolioScore(allAvailableStocks);
+      
       if (mounted) setState(() {});
     } else {
       if (mounted) {
@@ -503,6 +525,13 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
       setState(() {
         allAvailableStocks = mockData;
       });
+      
+      // Update portfolio score with initial prices (ensures leaderboard has data)
+      Future.delayed(const Duration(seconds: 1), () {
+        if (mounted) {
+          _updatePortfolioScore(mockData);
+        }
+      });
 
       // Listen for market updates
       _realTimeService.marketUpdates.listen((updatedStocks) {
@@ -510,6 +539,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
           setState(() {
             allAvailableStocks = updatedStocks;
           });
+          
+          // Update portfolio score when prices change
+          _updatePortfolioScore(updatedStocks);
         }
       });
 
@@ -534,6 +566,9 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               _watchlistStocks[watchlistIndex] = stockUpdate;
             }
           });
+          
+          // Update portfolio score when individual stock price changes
+          _updatePortfolioScore(allAvailableStocks);
         }
       });
     } catch (e) {
@@ -611,17 +646,40 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
               ),
             ),
           ),
-          // Owl chat AI overlay
+          // Chat AI overlay - Owl character
           Positioned(
             right: 16,
             bottom: 24,
-            child: OwlCoach(
+            child: GestureDetector(
               onTap: () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (context) => const ChatScreen()),
                 );
               },
+              child: Container(
+                width: 64,
+                height: 64,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    colors: [accentOrange, accentOrangeDim],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accentOrange.withOpacity(0.4),
+                      blurRadius: 12,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: const Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: OwlCharacter(size: 48.0, isAnimated: true),
+                ),
+              ),
             ),
           ),
           // Tip bubble overlay
@@ -1288,41 +1346,6 @@ class _HomeScreenState extends State<HomeScreen> with SingleTickerProviderStateM
             label: 'Profile',
           ),
         ],
-      ),
-    );
-  }
-}
-
-// CoachOverlay widget - assuming this is defined elsewhere, but adding a placeholder if needed
-
-class OwlCoach extends StatelessWidget {
-  final VoidCallback onTap;
-
-  const OwlCoach({super.key, required this.onTap});
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 60,
-        height: 60,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: const LinearGradient(
-            colors: [Color(0xFFFF9500), Color(0xFFCC7700)],
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: const Color(0xFFFF9500).withOpacity(0.4),
-              blurRadius: 12,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Center(
-          child: OwlCharacter(size: 56.0),
-        ),
       ),
     );
   }

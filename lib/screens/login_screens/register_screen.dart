@@ -19,6 +19,17 @@ class _RegisterScreenState extends State<RegisterScreen>
   final _auth = FirebaseAuth.instance;
   final _firestore = FirebaseFirestore.instance;
 
+  // Modern dark color scheme with orange accents (matching home_screen.dart)
+  static const Color darkBg = Color(0xFF0D0D0D);
+  static const Color cardDark = Color(0xFF1A1A1A);
+  static const Color cardLight = Color(0xFF242424);
+  static const Color accentOrange = Color(0xFFFF9500);
+  static const Color accentOrangeDim = Color(0xFFCC7700);
+  static const Color textPrimary = Color(0xFFFFFFFF);
+  static const Color textSecondary = Color(0xFF999999);
+  static const Color textTertiary = Color(0xFF666666);
+  static const Color borderColor = Color(0xFF2A2A2A);
+
   AnimationController? _controller;
   Animation<double>? _fadeAnimation;
   Animation<Offset>? _slideAnimation;
@@ -122,22 +133,11 @@ class _RegisterScreenState extends State<RegisterScreen>
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
+      backgroundColor: darkBg,
       body: Container(
         width: size.width,
         height: size.height,
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0F0C29),
-              Color(0xFF24243e),
-              Color(0xFF302B63),
-              Color(0xFF0F0C29),
-            ],
-            stops: [0.0, 0.3, 0.7, 1.0],
-          ),
-        ),
+        color: darkBg,
         child: Stack(
           children: [
             // Animated floating elements
@@ -154,22 +154,22 @@ class _RegisterScreenState extends State<RegisterScreen>
                         MediaQuery.of(context).padding.top -
                         MediaQuery.of(context).padding.bottom,
                   ),
-                child: Center(
-                  child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
-                      ? FadeTransition(
-                    opacity: _fadeAnimation!,
-                    child: SlideTransition(
-                      position: _slideAnimation!,
-                      child: ScaleTransition(
-                        scale: _scaleAnimation!,
-                        child: _buildRegisterCard(context),
+                  child: Center(
+                    child: _fadeAnimation != null && _slideAnimation != null && _scaleAnimation != null
+                        ? FadeTransition(
+                      opacity: _fadeAnimation!,
+                      child: SlideTransition(
+                        position: _slideAnimation!,
+                        child: ScaleTransition(
+                          scale: _scaleAnimation!,
+                          child: _buildRegisterCard(context),
+                        ),
                       ),
-                    ),
-                  )
-                      : _buildRegisterCard(context),
+                    )
+                        : _buildRegisterCard(context),
+                  ),
                 ),
-              ),
-            ),)
+              ),)
           ],
         ),
       ),
@@ -206,7 +206,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                 shape: BoxShape.circle,
                 gradient: RadialGradient(
                   colors: [
-                    Colors.white.withOpacity(0.1),
+                    accentOrange.withOpacity(0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -228,30 +228,21 @@ class _RegisterScreenState extends State<RegisterScreen>
       constraints: const BoxConstraints(maxWidth: 400),
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        gradient: LinearGradient(
+        gradient: const LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [
-            Colors.white.withOpacity(0.25),
-            Colors.white.withOpacity(0.15),
-          ],
+          colors: [cardDark, cardLight],
         ),
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
-          color: Colors.white.withOpacity(0.3),
-          width: 1.5,
+          color: borderColor,
+          width: 1,
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.3),
+            color: Colors.black.withOpacity(0.5),
             blurRadius: 30,
             offset: const Offset(0, 20),
-            spreadRadius: -5,
-          ),
-          BoxShadow(
-            color: Colors.white.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, -10),
             spreadRadius: -5,
           ),
         ],
@@ -270,16 +261,12 @@ class _RegisterScreenState extends State<RegisterScreen>
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFFFF6B6B),
-                        Color(0xFF4ECDC4),
-                        Color(0xFFFF6B6B),
-                      ],
+                      colors: [accentOrange, accentOrangeDim, accentOrange],
                     ),
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
-                        color: const Color(0xFFFF6B6B).withOpacity(0.5),
+                        color: accentOrange.withOpacity(0.5),
                         blurRadius: 15,
                         spreadRadius: 1,
                       ),
@@ -288,7 +275,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                   child: const Icon(
                     Icons.person_add_rounded,
                     size: 40,
-                    color: Colors.white,
+                    color: darkBg,
                   ),
                 ),
               );
@@ -301,26 +288,21 @@ class _RegisterScreenState extends State<RegisterScreen>
           const SizedBox(height: 20),
 
           // Welcome text with gradient
-          ShaderMask(
-            shaderCallback: (bounds) => const LinearGradient(
-              colors: [Colors.white, Color(0xFFFF6B6B)],
-            ).createShader(bounds),
-            child: const Text(
-              'Join StockMaster!',
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-                letterSpacing: -0.5,
-              ),
+          const Text(
+            'Join StockMaster!',
+            style: TextStyle(
+              fontSize: 28,
+              fontWeight: FontWeight.w700,
+              color: textPrimary,
+              letterSpacing: -0.8,
             ),
           ),
           const SizedBox(height: 4),
-          Text(
+          const Text(
             'Create your account',
             style: TextStyle(
               fontSize: 16,
-              color: Colors.white.withOpacity(0.8),
+              color: textSecondary,
               fontWeight: FontWeight.w400,
             ),
           ),
@@ -350,14 +332,14 @@ class _RegisterScreenState extends State<RegisterScreen>
             height: 50,
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
+                colors: [accentOrange, accentOrangeDim],
                 begin: Alignment.centerLeft,
                 end: Alignment.centerRight,
               ),
               borderRadius: BorderRadius.circular(16),
               boxShadow: [
                 BoxShadow(
-                  color: const Color(0xFFFF6B6B).withOpacity(0.4),
+                  color: accentOrange.withOpacity(0.4),
                   blurRadius: 15,
                   offset: const Offset(0, 8),
                 ),
@@ -372,9 +354,9 @@ class _RegisterScreenState extends State<RegisterScreen>
                   child: Text(
                     'Create Account',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: darkBg,
                       fontSize: 16,
-                      fontWeight: FontWeight.w600,
+                      fontWeight: FontWeight.w700,
                       letterSpacing: 0.5,
                     ),
                   ),
@@ -390,7 +372,7 @@ class _RegisterScreenState extends State<RegisterScreen>
               Expanded(
                 child: Container(
                   height: 1,
-                  color: Colors.white.withOpacity(0.3),
+                  color: borderColor,
                 ),
               ),
               Padding(
@@ -398,7 +380,7 @@ class _RegisterScreenState extends State<RegisterScreen>
                 child: Text(
                   'or sign up with',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.7),
+                    color: textSecondary,
                     fontSize: 12,
                   ),
                 ),
@@ -406,7 +388,7 @@ class _RegisterScreenState extends State<RegisterScreen>
               Expanded(
                 child: Container(
                   height: 1,
-                  color: Colors.white.withOpacity(0.3),
+                  color: borderColor,
                 ),
               ),
             ],
@@ -445,14 +427,14 @@ class _RegisterScreenState extends State<RegisterScreen>
               text: TextSpan(
                 text: "Already have an account? ",
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.7),
+                  color: textSecondary,
                   fontSize: 14,
                 ),
                 children: const [
                   TextSpan(
                     text: "Sign in",
                     style: TextStyle(
-                      color: Color(0xFFFF6B6B),
+                      color: accentOrange,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -474,33 +456,26 @@ class _RegisterScreenState extends State<RegisterScreen>
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: cardDark,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: borderColor,
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.1),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: TextField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
         style: const TextStyle(
-          color: Colors.white,
+          color: textPrimary,
           fontSize: 15,
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           labelText: label,
           labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.7),
+            color: textSecondary,
             fontSize: 13,
           ),
           prefixIcon: Container(
@@ -508,13 +483,13 @@ class _RegisterScreenState extends State<RegisterScreen>
             padding: const EdgeInsets.all(6),
             decoration: BoxDecoration(
               gradient: const LinearGradient(
-                colors: [Color(0xFFFF6B6B), Color(0xFF4ECDC4)],
+                colors: [accentOrange, accentOrangeDim],
               ),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Icon(
               icon,
-              color: Colors.white,
+              color: darkBg,
               size: 18,
             ),
           ),
@@ -539,19 +514,12 @@ class _RegisterScreenState extends State<RegisterScreen>
       width: 120,
       height: 44,
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.1),
+        color: cardDark,
         borderRadius: BorderRadius.circular(10),
         border: Border.all(
-          color: Colors.white.withOpacity(0.2),
+          color: borderColor,
           width: 1,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: Material(
         color: Colors.transparent,
@@ -563,14 +531,14 @@ class _RegisterScreenState extends State<RegisterScreen>
             children: [
               Icon(
                 icon,
-                color: Colors.white,
+                color: textPrimary,
                 size: 20,
               ),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: const TextStyle(
-                  color: Colors.white,
+                  color: textPrimary,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
                 ),

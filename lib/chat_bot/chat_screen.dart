@@ -4,6 +4,7 @@ import 'api_service.dart';
 import 'app_colors.dart';
 import 'chat_bubble.dart';
 import 'message_model.dart';
+import '../widgets/owl_character.dart';
 
 
 class ChatScreen extends StatefulWidget {
@@ -51,7 +52,14 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('📈 StockWise AI'),
+        title: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const OwlCharacter(size: 28.0, isAnimated: true),
+            const SizedBox(width: 8),
+            const Text('StockWise AI'),
+          ],
+        ),
         centerTitle: true,
       ),
       body: Column(
